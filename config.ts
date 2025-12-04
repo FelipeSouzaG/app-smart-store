@@ -1,6 +1,6 @@
 const isProd = (import.meta as any).env.PROD;
 
-export const API_BASE_URL = isProd
+export const API_BASE_URL = isProd 
   ? 'https://api-smart-store.onrender.com/api'
   : 'http://localhost:4001/api';
 
