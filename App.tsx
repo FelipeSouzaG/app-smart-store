@@ -1,3 +1,4 @@
+
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { API_BASE_URL, SAAS_LOGIN_URL, SAAS_API_URL } from './config';
 import Layout from './components/Layout';
@@ -6,7 +7,6 @@ import type { User } from './types';
 
 const App: React.FC = () => {
     const [user, setUser] = useState<User | null>(null);
-    // We no longer rely on localStorage for persistence, but we keep the state for the session
     const [token, setToken] = useState<string | null>(null); 
     const [isLoading, setIsLoading] = useState(true);
     
@@ -90,10 +90,13 @@ const App: React.FC = () => {
             });
 
             if (response.ok) {
-                const userData = await response.json();
-                setUser(userData);
-                // We don't store token in state anymore for persistence, 
-                // but we can keep it if needed for non-cookie logic (rare)
+                const data = await response.json();
+                // The API now returns { user, token }
+                setUser(data.user);
+                // Store token in memory for SaaS API calls (which live on a different domain and can't use the cookie)
+                if (data.token) {
+                    setToken(data.token);
+                }
             } else {
                 if (bearerToken) { 
                     // Failed even with fresh token
@@ -111,8 +114,8 @@ const App: React.FC = () => {
     };
 
     const login = (userData: User, userToken: string) => {
-        // Legacy method signature, mostly unused now due to OAuth flow
         setUser(userData);
+        setToken(userToken);
     };
 
     const updateUser = (newUserData: User) => {
@@ -162,7 +165,7 @@ const App: React.FC = () => {
             }
 
             if (!(error instanceof Error && error.message.includes('não encontrado'))) {
-                 alert(`Ocorreu um erro: ${errorMessage}`);
+                 console.warn(`API Error: ${errorMessage}`);
             }
             return null;
         }
