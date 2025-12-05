@@ -1,0 +1,7 @@
+{
+  "name": "Smart Store Management",
+  "description": "An intelligent management system for an electronics, accessories, and cell phone repair store, featuring user authentication, inventory control, cash register, sales, and a smart KPI dashboard powered by Gemini.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
