@@ -16,6 +16,17 @@ interface CostModalProps {
     onSave: (transaction: Omit<CashTransaction, 'id' | 'timestamp'> | CashTransaction) => void;
 }
 
+// Helper to prevent timezone issues (Store/Read as UTC Noon)
+const createDateAsUTC = (dateString: string) => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+};
+
+const formatDateUTC = (dateString: Date | string) => {
+    if (!dateString) return '-';
+    return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+};
+
 const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) => {
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
@@ -58,6 +69,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
             setAmount(formatMoney((costToEdit.amount * 100).toFixed(0)));
             setCategory(costToEdit.category);
             setStatus(costToEdit.status);
+            // Format dates back to YYYY-MM-DD for input value, ensuring correct day is picked from ISO string
             setDueDate(costToEdit.dueDate ? new Date(costToEdit.dueDate).toISOString().split('T')[0] : '');
             setPaymentDate(costToEdit.paymentDate ? new Date(costToEdit.paymentDate).toISOString().split('T')[0] : '');
         } else {
@@ -116,11 +128,11 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
             type: TransactionType.EXPENSE,
             category,
             status,
-            dueDate: new Date(new Date(dueDate).setHours(12)), // Avoid TZ issues
+            dueDate: createDateAsUTC(dueDate), // Create Safe UTC Date
         };
 
         if (status === TransactionStatus.PAID) {
-            transactionPayload.paymentDate = new Date(new Date(paymentDate).setHours(12));
+            transactionPayload.paymentDate = createDateAsUTC(paymentDate); // Create Safe UTC Date
         } else {
             transactionPayload.paymentDate = null; // Clear if pending
         }
@@ -186,6 +198,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
                                 type="date" 
                                 value={paymentDate} 
                                 onChange={e => setPaymentDate(e.target.value)} 
+                                max={new Date().toISOString().split('T')[0]}
                                 className={`mt-1 block w-full rounded-md bg-green-50 dark:bg-gray-700 border-green-300 dark:border-green-600 shadow-sm focus:border-green-500 focus:ring-green-500 px-3 py-2 ${dateError ? 'border-red-500' : ''}`}
                             />
                         </div>
@@ -389,9 +402,19 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                 </tr>
                              ) : (
                                 currentRecords.map(t => {
-                                    // Calculate isLate: Status PENDING and DueDate < Today
-                                    const isLate = t.status === TransactionStatus.PENDING && t.dueDate && new Date(t.dueDate) < new Date(new Date().setHours(0,0,0,0));
+                                    // Calculate logic for visual feedback
+                                    const today = new Date().setHours(0,0,0,0);
                                     
+                                    // Handle UTC date conversion for accurate day comparison
+                                    const dueDateObj = t.dueDate ? new Date(t.dueDate) : null;
+                                    const paymentDateObj = t.paymentDate ? new Date(t.paymentDate) : null;
+                                    
+                                    // Is Late Pending: Status PENDING and DueDate < Today
+                                    const isLatePending = t.status === TransactionStatus.PENDING && dueDateObj && dueDateObj.getTime() < today;
+                                    
+                                    // Paid Late: Status PAID and PaymentDate > DueDate
+                                    const isPaidLate = t.status === TransactionStatus.PAID && paymentDateObj && dueDateObj && paymentDateObj.getTime() > dueDateObj.getTime();
+
                                     return (
                                     <tr key={t.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
                                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{t.description}</td>
@@ -406,22 +429,27 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                                 : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
                                             }`}>{t.status}</span>
                                         </td>
-                                        <td className="px-6 py-4">{new Date(t.timestamp).toLocaleDateString()}</td>
+                                        <td className="px-6 py-4">{formatDateUTC(t.timestamp)}</td>
                                         
                                         {/* Due Date Column with Overdue Logic */}
                                         <td className="px-6 py-4">
                                             {t.dueDate ? (
-                                                <div className={isLate ? "text-red-500 font-bold" : ""}>
-                                                    {new Date(t.dueDate).toLocaleDateString()}
-                                                    {isLate && <span className="block text-[10px] uppercase">Atrasado</span>}
+                                                <div className={isLatePending ? "text-red-500 font-bold" : ""}>
+                                                    {formatDateUTC(t.dueDate)}
+                                                    {isLatePending && <span className="block text-[10px] uppercase">Atrasado</span>}
                                                 </div>
                                             ) : '-'}
                                         </td>
 
                                         {/* Payment Date Column */}
-                                        <td className="px-6 py-4 text-green-600 font-medium">
+                                        <td className={`px-6 py-4 font-medium ${isPaidLate ? "text-red-500 font-bold" : "text-green-600"}`}>
                                             {t.status === TransactionStatus.PAID && t.paymentDate 
-                                                ? new Date(t.paymentDate).toLocaleDateString() 
+                                                ? (
+                                                    <div>
+                                                        {formatDateUTC(t.paymentDate)}
+                                                        {isPaidLate && <span className="block text-[10px] uppercase text-red-500">Atraso</span>}
+                                                    </div>
+                                                ) 
                                                 : '-'
                                             }
                                         </td>
