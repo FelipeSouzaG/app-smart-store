@@ -1,5 +1,4 @@
 
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { CashTransaction, TransactionStatus, TransactionType, TransactionCategory } from '../types';
 import { formatCurrencyNumber, formatMoney, formatName } from '../validation';
@@ -24,6 +23,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
     const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PENDING);
     const [dueDate, setDueDate] = useState('');
     const [error, setError] = useState('');
+    const [dateError, setDateError] = useState('');
 
     const allowedCategories = useMemo(() => Object.values(TransactionCategory).filter(cat =>
         ![
@@ -63,7 +63,22 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
             setDueDate('');
         }
         setError('');
+        setDateError('');
     }, [costToEdit]);
+
+    // Validation for Date based on Status
+    useEffect(() => {
+        if (status === TransactionStatus.PAID && dueDate) {
+            const today = new Date().toISOString().split('T')[0];
+            if (dueDate > today) {
+                setDateError('Data do pagamento não pode ser futura.');
+            } else {
+                setDateError('');
+            }
+        } else {
+            setDateError('');
+        }
+    }, [status, dueDate]);
 
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -73,6 +88,8 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
             setError('O valor deve ser um número positivo.');
             return;
         }
+        if (dateError) return;
+
         setError('');
 
          const transactionPayload = {
@@ -94,7 +111,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
         }
     };
     
-    const isSaveDisabled = !description || !amount || parseCurrency(amount) <= 0;
+    const isSaveDisabled = !description || !amount || parseCurrency(amount) <= 0 || !!dateError;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -123,8 +140,17 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
                         </select>
                     </div>
                     <div>
-                        <label htmlFor="dueDate" className="block text-sm font-medium">Data de Vencimento (Opcional)</label>
-                        <input id="dueDate" type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"/>
+                        <label htmlFor="dueDate" className="block text-sm font-medium">
+                            {status === TransactionStatus.PAID ? 'Data do Pagamento' : 'Data de Vencimento'} {status !== TransactionStatus.PAID && '(Opcional)'}
+                        </label>
+                        <input 
+                            id="dueDate" 
+                            type="date" 
+                            value={dueDate} 
+                            onChange={e => setDueDate(e.target.value)} 
+                            className={`mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2 ${dateError ? 'border-red-500' : ''}`}
+                        />
+                        {dateError && <p className="text-xs text-red-500 mt-1">{dateError}</p>}
                     </div>
                     <div className="flex justify-end space-x-4 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 rounded-md text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500">Cancelar</button>
@@ -310,7 +336,7 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                 <th scope="col" className="px-6 py-3">Valor</th>
                                 <th scope="col" className="px-6 py-3">Status</th>
                                 <th scope="col" className="px-6 py-3">Data Lançamento</th>
-                                <th scope="col" className="px-6 py-3">Data Vencimento</th>
+                                <th scope="col" className="px-6 py-3">Vencimento | Pagamento</th>
                                 <th scope="col" className="px-6 py-3">Ações</th>
                             </tr>
                         </thead>
@@ -320,7 +346,10 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                     <td colSpan={7} className="text-center py-8 text-gray-500">Nenhum custo encontrado para os filtros aplicados.</td>
                                 </tr>
                              ) : (
-                                currentRecords.map(t => (
+                                currentRecords.map(t => {
+                                    const isLate = t.status === TransactionStatus.PENDING && t.dueDate && new Date(t.dueDate) < new Date(new Date().setHours(0,0,0,0));
+                                    
+                                    return (
                                     <tr key={t.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
                                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{t.description}</td>
                                         <td className="px-6 py-4">{t.category}</td>
@@ -335,13 +364,21 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                             }`}>{t.status}</span>
                                         </td>
                                         <td className="px-6 py-4">{new Date(t.timestamp).toLocaleDateString()}</td>
-                                        <td className="px-6 py-4">{t.dueDate ? new Date(t.dueDate).toLocaleDateString() : 'N/A'}</td>
+                                        <td className="px-6 py-4">
+                                            {t.dueDate ? (
+                                                <div className={isLate ? "text-red-500 font-bold" : ""}>
+                                                    {new Date(t.dueDate).toLocaleDateString()}
+                                                    {isLate && <span className="block text-[10px] uppercase">Atrasado</span>}
+                                                </div>
+                                            ) : 'N/A'}
+                                        </td>
                                         <td className="px-6 py-4 whitespace-nowrap">
                                             <button onClick={() => handleOpenModalForEdit(t)} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline mr-4">Editar</button>
                                             <button onClick={() => handleDeleteRequest(t.id)} className="font-medium text-red-600 dark:text-red-500 hover:underline">Excluir</button>
                                         </td>
                                     </tr>
-                                ))
+                                    );
+                                })
                              )}
                         </tbody>
                     </table>
