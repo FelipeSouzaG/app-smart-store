@@ -138,6 +138,7 @@ export interface CashTransaction {
   status: TransactionStatus;
   timestamp: Date;
   dueDate?: Date;
+  paymentDate?: Date; // Data real do pagamento
   serviceOrderId?: string; // Link to the service order
   purchaseId?: string;
   saleId?: string;
