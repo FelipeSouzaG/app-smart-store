@@ -1,3 +1,4 @@
+
 import { UserRole } from './types';
 
 export const navItems = [
@@ -18,6 +19,12 @@ export const navItems = [
     path: 'sales-history',
     icon: 'sales-history',
     roles: [UserRole.OWNER, UserRole.MANAGER],
+  },
+  {
+    label: 'Financeiro',
+    path: 'finance',
+    icon: 'finance',
+    roles: [UserRole.OWNER],
   },
   {
     label: 'Caixa',
