@@ -94,6 +94,7 @@ const App: React.FC = () => {
                 // The API now returns { user, token }
                 setUser(data.user);
                 // Store token in memory for SaaS API calls (which live on a different domain and can't use the cookie)
+                // AND for fallback authentication on API calls if cookies fail
                 if (data.token) {
                     setToken(data.token);
                 }
@@ -122,24 +123,35 @@ const App: React.FC = () => {
         setUser(newUserData);
     };
 
-    // Updated API Call to use Cookies and CSRF Header
+    // Updated API Call to use Cookies AND Header Fallback
     const apiCall = async (endpoint: string, method: string, body?: any): Promise<any | null> => {
         try {
+            const headers: any = {
+                'Content-Type': 'application/json',
+                'X-Requested-With': 'XMLHttpRequest' // Anti-CSRF Header
+            };
+
+            // HYBRID AUTHENTICATION:
+            // Always inject the token if we have it in memory.
+            // This is critical because cross-domain cookies (SameSite=Lax/None) can be unreliable 
+            // depending on browser settings and domain configuration (Render vs Cloudflare).
+            if (token) {
+                headers['Authorization'] = `Bearer ${token}`;
+            }
+
             const options: RequestInit = {
                 method,
-                headers: {
-                    'Content-Type': 'application/json',
-                    'X-Requested-With': 'XMLHttpRequest' // Anti-CSRF Header
-                },
-                credentials: 'include' // Send HttpOnly Cookies
+                headers,
+                credentials: 'include' // Send HttpOnly Cookies if available
             };
+            
             if (body) {
                 options.body = JSON.stringify(body);
             }
             const response = await fetch(`${API_BASE_URL}/${endpoint}`, options);
 
             if (response.status === 401 || response.status === 403) {
-                // Access denied or Cookie expired
+                // Access denied or Token expired
                 logout();
                 return null;
             }
