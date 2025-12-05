@@ -13,6 +13,7 @@ import Costs from './Costs';
 import Users from './Users';
 import Customers from './Customers';
 import Suppliers from './Suppliers';
+import Finance from './Finance'; // Import Finance
 import Profile from './Profile';
 import GoalsModal from './GoalsModal';
 import SystemStatusModal from './SystemStatusModal';
@@ -424,6 +425,7 @@ const Layout: React.FC = () => {
             case 'suppliers': return <Suppliers suppliers={suppliers} onAddSupplier={handleAddSupplier} onUpdateSupplier={handleUpdateSupplier} onDeleteSupplier={handleDeleteSupplier} />;
             case 'users': return <Users users={users} onAddUser={handleAddUser} onUpdateUser={handleUpdateUser} onDeleteUser={handleDeleteUser} />;
             case 'profile': return <Profile onUpdateProfile={handleUpdateProfile} />;
+            case 'finance': return <Finance />; // Add Finance component
             default: return <Dashboard transactions={transactions} ticketSales={ticketSales} products={products} goals={goals} onSaveGoals={handleSaveGoals} />;
         }
     };
