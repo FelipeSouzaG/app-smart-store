@@ -8,6 +8,7 @@ interface SidebarProps {
     setActivePage: (page: string) => void;
     isOpen: boolean;
     onClose: () => void;
+    companyName?: string; // New Prop
 }
 
 const getIcon = (iconKey: string) => {
@@ -87,7 +88,7 @@ const getIcon = (iconKey: string) => {
 };
 
 
-const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage, isOpen, onClose }) => {
+const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage, isOpen, onClose, companyName }) => {
     const { user, logout } = useContext(AuthContext);
 
     const filteredNavItems = navItems.filter(item => user && item.roles.includes(user.role));
@@ -114,9 +115,16 @@ const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage, isOpen, on
                 lg:translate-x-0 lg:static lg:inset-auto lg:flex
             `}>
                 <div className="h-20 flex items-center justify-between px-6 border-b border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center">
-                        <div className="text-indigo-600 dark:text-indigo-400">{getIcon('logo')}</div>
-                        <h1 className="ml-3 text-xl font-bold">SmartStore</h1>
+                    <div className="flex flex-col">
+                        <div className="flex items-center">
+                            <div className="text-indigo-600 dark:text-indigo-400">{getIcon('logo')}</div>
+                            <h1 className="ml-3 text-xl font-bold">SmartStore</h1>
+                        </div>
+                        {companyName && (
+                            <span className="text-[10px] text-gray-500 dark:text-gray-400 ml-11 font-medium truncate max-w-[150px]">
+                                {companyName}
+                            </span>
+                        )}
                     </div>
                     {/* Close Button for Mobile */}
                     <button onClick={onClose} className="lg:hidden text-gray-500 hover:text-gray-800 dark:hover:text-white">
