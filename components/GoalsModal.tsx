@@ -258,6 +258,9 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Nome da Empresa / Razão Social <span className="text-red-500">*</span></label>
                                     <input type="text" name="name" value={goals.companyInfo?.name} onChange={handleCompanyChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Tech Soluções"/>
+                                    {goals.tenantName && (
+                                        <p className="text-xs text-gray-400 mt-1 font-mono">{goals.tenantName}.fluxoclean.com.br</p>
+                                    )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium mb-1">CPF / CNPJ <span className="text-red-500">*</span></label>
