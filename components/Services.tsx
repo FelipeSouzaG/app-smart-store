@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { Service, ServiceBrand, KpiGoals } from '../types';
+import { Service, KpiGoals } from '../types';
 import { formatCurrencyNumber, formatMoney, formatName } from '../validation';
 
 interface ServiceModalProps {
@@ -12,8 +12,7 @@ interface ServiceModalProps {
 
 const ServiceModal: React.FC<ServiceModalProps> = ({ serviceToEdit, existingServices, onClose, onSave }) => {
     const [name, setName] = useState('');
-    const [brand, setBrand] = useState<ServiceBrand>(ServiceBrand.APPLE);
-    const [customBrand, setCustomBrand] = useState('');
+    const [brand, setBrand] = useState('');
     const [model, setModel] = useState('');
     const [price, setPrice] = useState('');
     const [partCost, setPartCost] = useState('');
@@ -39,19 +38,7 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ serviceToEdit, existingServ
     useEffect(() => {
         if (serviceToEdit) {
             setName(serviceToEdit.name);
-            
-            // Check if the stored brand is one of the standard enums
-            const isStandardBrand = Object.values(ServiceBrand).includes(serviceToEdit.brand as ServiceBrand);
-            
-            if (isStandardBrand && serviceToEdit.brand !== ServiceBrand.OTHER) {
-                setBrand(serviceToEdit.brand as ServiceBrand);
-                setCustomBrand('');
-            } else {
-                // If it's not standard, or it IS 'Outra', set select to OTHER and fill input
-                setBrand(ServiceBrand.OTHER);
-                setCustomBrand(serviceToEdit.brand === ServiceBrand.OTHER ? '' : serviceToEdit.brand);
-            }
-
+            setBrand(serviceToEdit.brand);
             setModel(serviceToEdit.model);
             setPrice(formatMoney((serviceToEdit.price * 100).toFixed(0)));
             setPartCost(formatMoney((serviceToEdit.partCost * 100).toFixed(0)));
@@ -60,8 +47,7 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ serviceToEdit, existingServ
         } else {
             // Reset form
             setName('');
-            setBrand(ServiceBrand.APPLE);
-            setCustomBrand('');
+            setBrand('');
             setModel('');
             setPrice('');
             setPartCost('');
@@ -91,22 +77,16 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ serviceToEdit, existingServ
         e.preventDefault();
         setDuplicateError('');
         
-        // Use custom brand if OTHER is selected, otherwise use the enum value
-        const finalBrand = brand === ServiceBrand.OTHER ? formatName(customBrand) : brand;
+        const formattedBrand = formatName(brand);
 
-        if (!finalBrand) {
-            alert("Por favor, informe a marca.");
-            return;
-        }
-
-        if (checkDuplicates(name, finalBrand, model)) {
+        if (checkDuplicates(name, formattedBrand, model)) {
             setDuplicateError('Este serviço (Tipo + Marca + Modelo) já está cadastrado.');
             return;
         }
 
         const payload = {
             name: formatName(name),
-            brand: finalBrand,
+            brand: formattedBrand,
             model: formatName(model),
             price: parseCurrency(price),
             partCost: parseCurrency(partCost),
@@ -139,23 +119,23 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ serviceToEdit, existingServ
                             }} 
                             onBlur={() => setName(formatName(name))} 
                             required 
-                            placeholder="Ex: Troca de Tela" 
                             className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
                         />
                     </div>
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                          <div>
                             <label className="block text-sm font-medium">Marca</label>
-                            <select 
+                            <input 
+                                type="text" 
                                 value={brand} 
                                 onChange={e => {
-                                    setBrand(e.target.value as ServiceBrand);
+                                    setBrand(e.target.value);
                                     setDuplicateError('');
                                 }} 
+                                onBlur={() => setBrand(formatName(brand))} 
+                                required 
                                 className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
-                            >
-                               {Object.values(ServiceBrand).map(b => <option key={b} value={b}>{b}</option>)}
-                            </select>
+                            />
                         </div>
                         <div>
                             <label className="block text-sm font-medium">Modelo</label>
@@ -168,30 +148,11 @@ const ServiceModal: React.FC<ServiceModalProps> = ({ serviceToEdit, existingServ
                                 }} 
                                 onBlur={() => setModel(formatName(model))} 
                                 required 
-                                placeholder="Ex: iPhone 13 Pro Max" 
                                 className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
                             />
                         </div>
                     </div>
                     
-                    {brand === ServiceBrand.OTHER && (
-                        <div className="animate-fade-in">
-                            <label className="block text-sm font-medium text-indigo-600 dark:text-indigo-400">Especifique a Marca</label>
-                            <input 
-                                type="text" 
-                                value={customBrand} 
-                                onChange={e => {
-                                    setCustomBrand(e.target.value);
-                                    setDuplicateError('');
-                                }} 
-                                onBlur={() => setCustomBrand(formatName(customBrand))}
-                                required 
-                                placeholder="Digite o nome da marca..." 
-                                className="mt-1 block w-full rounded-md bg-indigo-50 dark:bg-gray-700 border-indigo-300 dark:border-indigo-500 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
-                            />
-                        </div>
-                    )}
-
                     <div>
                         <label className="block text-sm font-medium">Preço Base (R$)</label>
                         <input type="text" value={price} onChange={e => handleCurrencyChange(e.target.value, setPrice)} required className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"/>
