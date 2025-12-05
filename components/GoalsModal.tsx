@@ -30,6 +30,11 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
     const [cepLoading, setCepLoading] = useState(false);
     const [cepError, setCepError] = useState('');
     
+    // Ensure form updates if parent props change (e.g. async fetch)
+    useEffect(() => {
+        setGoals(currentGoals);
+    }, [currentGoals]);
+
     // Define steps for the wizard
     const steps = [
         { title: 'Empresa', description: 'Dados cadastrais' },
@@ -55,7 +60,7 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
         if (goals.autoApplyDiscount === undefined) {
             setGoals(prev => ({ ...prev, autoApplyDiscount: true }));
         }
-    }, []);
+    }, [goals]);
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
         const { name, value } = e.target;
@@ -149,8 +154,14 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                     !!goals.companyInfo?.name &&
                     !!goals.companyInfo?.cnpjCpf &&
                     !!goals.companyInfo?.phone &&
+                    !!goals.companyInfo?.email &&
+                    // Address Fields
+                    !!goals.companyInfo?.address?.cep &&
                     !!goals.companyInfo?.address?.street &&
-                    !!goals.companyInfo?.address?.number
+                    !!goals.companyInfo?.address?.number &&
+                    !!goals.companyInfo?.address?.neighborhood &&
+                    !!goals.companyInfo?.address?.city &&
+                    !!goals.companyInfo?.address?.state
                 );
             case 1: // Goals
                 return (
@@ -190,7 +201,7 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
     };
 
     return (
-         <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
+         <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
             <div className={`bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-3xl my-8 flex flex-col max-h-[95vh] transition-all duration-300 ${forceSetup ? 'border-4 border-indigo-500' : ''}`}>
                 
                 {/* Header */}
@@ -202,7 +213,7 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                             </h2>
                             <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">
                                 {forceSetup 
-                                    ? 'Vamos configurar sua loja em 3 passos simples.' 
+                                    ? 'Para começar, precisamos completar alguns dados importantes.' 
                                     : 'Ajuste os parâmetros do sistema.'}
                             </p>
                         </div>
@@ -257,22 +268,22 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Nome da Empresa / Razão Social <span className="text-red-500">*</span></label>
-                                    <input type="text" name="name" value={goals.companyInfo?.name} onChange={handleCompanyChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Tech Soluções"/>
+                                    <input type="text" name="name" value={goals.companyInfo?.name || ''} onChange={handleCompanyChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Tech Soluções"/>
                                     {goals.tenantName && (
                                         <p className="text-xs text-gray-400 mt-1 font-mono">{goals.tenantName}.fluxoclean.com.br</p>
                                     )}
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium mb-1">CPF / CNPJ <span className="text-red-500">*</span></label>
-                                    <input type="text" name="cnpjCpf" value={goals.companyInfo?.cnpjCpf} onChange={handleCompanyChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500" placeholder="00.000.000/0000-00"/>
+                                    <input type="text" name="cnpjCpf" value={goals.companyInfo?.cnpjCpf || ''} onChange={handleCompanyChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500" placeholder="00.000.000/0000-00"/>
                                 </div>
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Telefone <span className="text-red-500">*</span></label>
-                                    <input type="text" name="phone" value={goals.companyInfo?.phone} onChange={handleCompanyChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500" placeholder="(00) 00000-0000"/>
+                                    <input type="text" name="phone" value={goals.companyInfo?.phone || ''} onChange={handleCompanyChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500" placeholder="(00) 00000-0000"/>
                                 </div>
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">E-mail</label>
-                                    <input type="email" name="email" value={goals.companyInfo?.email} onChange={handleCompanyChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500" placeholder="contato@empresa.com"/>
+                                    <label className="block text-sm font-medium mb-1">E-mail <span className="text-red-500">*</span></label>
+                                    <input type="email" name="email" value={goals.companyInfo?.email || ''} onChange={handleCompanyChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500" placeholder="contato@empresa.com"/>
                                 </div>
                             </div>
 
@@ -285,7 +296,7 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                                             <input 
                                                 type="text" 
                                                 name="cep" 
-                                                value={goals.companyInfo?.address.cep} 
+                                                value={goals.companyInfo?.address.cep || ''} 
                                                 onChange={handleAddressChange} 
                                                 onBlur={handleCepBlur}
                                                 className={`w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500 ${cepError ? 'border-red-500' : ''}`}
@@ -296,60 +307,56 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                                         {cepError && <p className="text-xs text-red-500 mt-1">{cepError}</p>}
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium mb-1 text-gray-500">Rua (Logradouro)</label>
+                                        <label className="block text-sm font-medium mb-1 text-gray-500">Rua (Logradouro) <span className="text-red-500">*</span></label>
                                         <input 
                                             type="text" 
                                             name="street" 
-                                            value={goals.companyInfo?.address.street} 
-                                            readOnly
-                                            disabled
-                                            className="w-full rounded-lg bg-gray-200 dark:bg-gray-600 border-gray-300 dark:border-gray-500 p-2.5 text-gray-500 cursor-not-allowed"
+                                            value={goals.companyInfo?.address.street || ''} 
+                                            onChange={handleAddressChange}
+                                            className="w-full rounded-lg bg-gray-200 dark:bg-gray-600 border-gray-300 dark:border-gray-500 p-2.5 text-gray-800 dark:text-white"
                                         />
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium mb-1">Número <span className="text-red-500">*</span></label>
-                                        <input type="text" name="number" value={goals.companyInfo?.address.number} onChange={handleAddressChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500"/>
+                                        <input type="text" name="number" value={goals.companyInfo?.address.number || ''} onChange={handleAddressChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500"/>
                                     </div>
                                     <div className="md:col-span-2">
                                         <label className="block text-sm font-medium mb-1">Complemento</label>
                                         <input 
                                             type="text" 
                                             name="complement" 
-                                            value={goals.companyInfo?.address.complement} 
+                                            value={goals.companyInfo?.address.complement || ''} 
                                             onChange={handleAddressChange} 
                                             className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500"
                                             placeholder="Apto, Sala, Bloco..."
                                         />
                                     </div>
                                     <div>
-                                        <label className="block text-sm font-medium mb-1 text-gray-500">Bairro</label>
+                                        <label className="block text-sm font-medium mb-1 text-gray-500">Bairro <span className="text-red-500">*</span></label>
                                         <input 
                                             type="text" 
                                             name="neighborhood" 
-                                            value={goals.companyInfo?.address.neighborhood} 
-                                            readOnly
-                                            disabled
-                                            className="w-full rounded-lg bg-gray-200 dark:bg-gray-600 border-gray-300 dark:border-gray-500 p-2.5 text-gray-500 cursor-not-allowed"
+                                            value={goals.companyInfo?.address.neighborhood || ''} 
+                                            onChange={handleAddressChange}
+                                            className="w-full rounded-lg bg-gray-200 dark:bg-gray-600 border-gray-300 dark:border-gray-500 p-2.5 text-gray-800 dark:text-white"
                                         />
                                     </div>
                                     <div className="md:col-span-2">
-                                        <label className="block text-sm font-medium mb-1 text-gray-500">Cidade / UF</label>
+                                        <label className="block text-sm font-medium mb-1 text-gray-500">Cidade / UF <span className="text-red-500">*</span></label>
                                         <div className="flex gap-2">
                                             <input 
                                                 type="text" 
                                                 name="city" 
-                                                value={goals.companyInfo?.address.city} 
-                                                readOnly
-                                                disabled
-                                                className="flex-1 rounded-lg bg-gray-200 dark:bg-gray-600 border-gray-300 dark:border-gray-500 p-2.5 text-gray-500 cursor-not-allowed" 
+                                                value={goals.companyInfo?.address.city || ''} 
+                                                onChange={handleAddressChange}
+                                                className="flex-1 rounded-lg bg-gray-200 dark:bg-gray-600 border-gray-300 dark:border-gray-500 p-2.5 text-gray-800 dark:text-white" 
                                             />
                                             <input 
                                                 type="text" 
                                                 name="state" 
-                                                value={goals.companyInfo?.address.state} 
-                                                readOnly
-                                                disabled
-                                                className="w-16 rounded-lg bg-gray-200 dark:bg-gray-600 border-gray-300 dark:border-gray-500 p-2.5 text-gray-500 cursor-not-allowed"
+                                                value={goals.companyInfo?.address.state || ''} 
+                                                onChange={handleAddressChange}
+                                                className="w-16 rounded-lg bg-gray-200 dark:bg-gray-600 border-gray-300 dark:border-gray-500 p-2.5 text-gray-800 dark:text-white"
                                             />
                                         </div>
                                     </div>
