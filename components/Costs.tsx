@@ -1,7 +1,8 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { CashTransaction, TransactionStatus, TransactionType, TransactionCategory } from '../types';
+import React, { useState, useMemo, useEffect, useContext } from 'react';
+import { CashTransaction, TransactionStatus, TransactionType, TransactionCategory, FinancialAccount, PaymentMethodConfig } from '../types';
 import { formatCurrencyNumber, formatMoney, formatName } from '../validation';
+import { AuthContext } from '../contexts/AuthContext';
 
 interface CostsProps {
     transactions: CashTransaction[];
@@ -12,8 +13,9 @@ interface CostsProps {
 
 interface CostModalProps {
     costToEdit?: CashTransaction | null;
+    accounts: FinancialAccount[];
     onClose: () => void;
-    onSave: (transaction: Omit<CashTransaction, 'id' | 'timestamp'> | CashTransaction) => void;
+    onSave: (transaction: any) => void; // Using any for flexible payload including custom installment logic
 }
 
 // Helper to prevent timezone issues (Store/Read as UTC Noon)
@@ -27,7 +29,7 @@ const formatDateUTC = (dateString: Date | string) => {
     return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 };
 
-const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) => {
+const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, onSave }) => {
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState<TransactionCategory>(TransactionCategory.OTHER);
@@ -36,6 +38,11 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
     // Separate Dates
     const [dueDate, setDueDate] = useState('');
     const [paymentDate, setPaymentDate] = useState('');
+    
+    // Financial Config
+    const [selectedAccountId, setSelectedAccountId] = useState('');
+    const [selectedMethodId, setSelectedMethodId] = useState('');
+    const [installments, setInstallments] = useState(1);
     
     const [error, setError] = useState('');
     const [dateError, setDateError] = useState('');
@@ -48,6 +55,11 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
             TransactionCategory.SERVICE_COST,
         ].includes(cat)
     ), []);
+
+    // Derived: Selected Payment Method details
+    const selectedAccount = useMemo(() => accounts.find(a => a.id === selectedAccountId), [accounts, selectedAccountId]);
+    const selectedMethod = useMemo(() => selectedAccount?.paymentMethods.find(m => m.id === selectedMethodId), [selectedAccount, selectedMethodId]);
+    const isCreditCard = selectedMethod?.type === 'Credit';
 
     const handleCurrencyChange = (value: string, setter: React.Dispatch<React.SetStateAction<string>>) => {
         if (value === '' || value === 'R$ ') {
@@ -72,6 +84,11 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
             // Format dates back to YYYY-MM-DD for input value, ensuring correct day is picked from ISO string
             setDueDate(costToEdit.dueDate ? new Date(costToEdit.dueDate).toISOString().split('T')[0] : '');
             setPaymentDate(costToEdit.paymentDate ? new Date(costToEdit.paymentDate).toISOString().split('T')[0] : '');
+            
+            // Financial Info populate (if available in future backend update, for now manual or derived)
+            // Assuming costToEdit might have these fields in future, for now defaulting empty
+            setSelectedAccountId(costToEdit.financialAccountId || '');
+            setSelectedMethodId(costToEdit.paymentMethodId || '');
         } else {
             setDescription('');
             setAmount('');
@@ -79,24 +96,33 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
             setStatus(TransactionStatus.PENDING);
             setDueDate('');
             setPaymentDate(new Date().toISOString().split('T')[0]); // Default payment to today if shown
+            setSelectedAccountId('');
+            setSelectedMethodId('');
+            setInstallments(1);
         }
         setError('');
         setDateError('');
     }, [costToEdit]);
 
-    // Validation for Payment Date
+    // Update status based on Payment Method choice logic
     useEffect(() => {
-        if (status === TransactionStatus.PAID && paymentDate) {
-            const today = new Date().toISOString().split('T')[0];
-            if (paymentDate > today) {
-                setDateError('Data do pagamento não pode ser futura.');
+        // If selecting a payment method (meaning we are defining how it's paid)
+        if (selectedMethod) {
+            if (isCreditCard) {
+                // Credit Card: Creates a Future Pending Transaction (waiting for bill)
+                // Although user might say "Paid with Credit Card", the money leaves account on Due Date.
+                // We lock status to Pending for future bill processing logic mostly, 
+                // BUT user prompt said: "Se status = Pago devo selecionar forma de pagamento".
+                // So we respect User's "Pago" selection but backend handles future dates.
+                
+                // However, standard logic:
+                // Credit Card purchase -> Status is technically Pending until bill is paid.
+                // We will trust the backend logic to set dates.
             } else {
-                setDateError('');
+                // Pix/Debit/Boleto -> Usually immediate payment if Status is Pago.
             }
-        } else {
-            setDateError('');
         }
-    }, [status, paymentDate]);
+    }, [selectedMethod, isCreditCard]);
 
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -115,8 +141,16 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
         }
 
         // Payment Date is mandatory IF status is PAID
-        if (status === TransactionStatus.PAID && !paymentDate) {
+        // Exception: If using Credit Card, the backend calculates future dates, so manual payment date is irrelevant here
+        // (It's determined by bill cycle).
+        if (status === TransactionStatus.PAID && !paymentDate && !isCreditCard) {
             setDateError('A data do pagamento é obrigatória para contas pagas.');
+            return;
+        }
+        
+        // Financial Method Validation
+        if (status === TransactionStatus.PAID && !selectedMethodId) {
+            setError('Selecione a forma de pagamento utilizada.');
             return;
         }
 
@@ -128,13 +162,16 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
             type: TransactionType.EXPENSE,
             category,
             status,
-            dueDate: createDateAsUTC(dueDate), // Create Safe UTC Date
+            dueDate: createDateAsUTC(dueDate),
+            financialAccountId: selectedAccountId || undefined,
+            paymentMethodId: selectedMethodId || undefined,
+            installments: isCreditCard ? installments : 1
         };
 
-        if (status === TransactionStatus.PAID) {
-            transactionPayload.paymentDate = createDateAsUTC(paymentDate); // Create Safe UTC Date
+        if (status === TransactionStatus.PAID && !isCreditCard) {
+            transactionPayload.paymentDate = createDateAsUTC(paymentDate); 
         } else {
-            transactionPayload.paymentDate = null; // Clear if pending
+            transactionPayload.paymentDate = null; 
         }
 
         if (costToEdit) {
@@ -147,12 +184,11 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
         }
     };
     
-    // Button is disabled logic
-    const isSaveDisabled = !description || !amount || parseCurrency(amount) <= 0 || !!dateError || !dueDate || (status === TransactionStatus.PAID && !paymentDate);
+    const isSaveDisabled = !description || !amount || parseCurrency(amount) <= 0 || !!dateError || !dueDate;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-md">
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
                 <h2 className="text-2xl font-bold mb-6">{costToEdit ? 'Editar Custo' : 'Novo Custo / Despesa'}</h2>
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
@@ -162,49 +198,102 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
                     <div>
                         <label htmlFor="amount" className="block text-sm font-medium">Valor (R$)</label>
                         <input id="amount" type="text" value={amount} onChange={e => { handleCurrencyChange(e.target.value, setAmount); setError(''); }} required className={`mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2 ${error ? 'border-red-500' : ''}`}/>
-                        {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
-                    </div>
-                    <div>
-                        <label htmlFor="category" className="block text-sm font-medium">Categoria</label>
-                        <select id="category" value={category} onChange={e => setCategory(e.target.value as TransactionCategory)} className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2">
-                           {allowedCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
-                        </select>
-                    </div>
-                     <div>
-                        <label htmlFor="status" className="block text-sm font-medium">Status</label>
-                        <select id="status" value={status} onChange={e => setStatus(e.target.value as TransactionStatus)} className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2">
-                           {Object.values(TransactionStatus).map(st => <option key={st} value={st}>{st}</option>)}
-                        </select>
                     </div>
                     
-                    {/* Due Date - Always Visible & Required */}
-                    <div>
-                        <label htmlFor="dueDate" className="block text-sm font-medium">Data de Vencimento <span className="text-red-500">*</span></label>
-                        <input 
-                            id="dueDate" 
-                            type="date" 
-                            value={dueDate} 
-                            onChange={e => setDueDate(e.target.value)} 
-                            className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
-                        />
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor="category" className="block text-sm font-medium">Categoria</label>
+                            <select id="category" value={category} onChange={e => setCategory(e.target.value as TransactionCategory)} className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2">
+                            {allowedCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
+                            </select>
+                        </div>
+                        <div>
+                            <label htmlFor="status" className="block text-sm font-medium">Status</label>
+                            <select id="status" value={status} onChange={e => setStatus(e.target.value as TransactionStatus)} className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2">
+                            {Object.values(TransactionStatus).map(st => <option key={st} value={st}>{st}</option>)}
+                            </select>
+                        </div>
                     </div>
 
-                    {/* Payment Date - Conditional */}
+                    {/* Financial Config Section */}
                     {status === TransactionStatus.PAID && (
-                        <div className="animate-fade-in">
-                            <label htmlFor="paymentDate" className="block text-sm font-medium text-green-600 dark:text-green-400">Data do Pagamento <span className="text-red-500">*</span></label>
-                            <input 
-                                id="paymentDate" 
-                                type="date" 
-                                value={paymentDate} 
-                                onChange={e => setPaymentDate(e.target.value)} 
-                                max={new Date().toISOString().split('T')[0]}
-                                className={`mt-1 block w-full rounded-md bg-green-50 dark:bg-gray-700 border-green-300 dark:border-green-600 shadow-sm focus:border-green-500 focus:ring-green-500 px-3 py-2 ${dateError ? 'border-red-500' : ''}`}
-                            />
+                        <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600 space-y-3 animate-fade-in">
+                            <h4 className="text-xs font-bold uppercase text-gray-500">Detalhes do Pagamento</h4>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div>
+                                    <label className="block text-xs font-medium mb-1">Banco</label>
+                                    <select 
+                                        value={selectedAccountId} 
+                                        onChange={e => { setSelectedAccountId(e.target.value); setSelectedMethodId(''); }} 
+                                        className="w-full rounded text-sm p-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-500"
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium mb-1">Método</label>
+                                    <select 
+                                        value={selectedMethodId} 
+                                        onChange={e => setSelectedMethodId(e.target.value)} 
+                                        disabled={!selectedAccountId}
+                                        className="w-full rounded text-sm p-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-500 disabled:opacity-50"
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {selectedAccount?.paymentMethods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {isCreditCard && (
+                                <div className="animate-fade-in">
+                                    <label className="block text-xs font-medium mb-1 text-indigo-600 dark:text-indigo-400">Parcelas</label>
+                                    <select 
+                                        value={installments} 
+                                        onChange={e => setInstallments(parseInt(e.target.value))}
+                                        className="w-full rounded text-sm p-2 bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-300 dark:border-indigo-500"
+                                    >
+                                        {Array.from({length: 12}, (_, i) => i + 1).map(n => (
+                                            <option key={n} value={n}>{n}x de {formatMoney(((parseCurrency(amount) || 0) / n).toFixed(0).replace('.', ''))}</option>
+                                        ))}
+                                    </select>
+                                    <p className="text-[10px] text-gray-500 mt-1">
+                                        *Lançamentos serão criados nos vencimentos futuros da fatura.
+                                    </p>
+                                </div>
+                            )}
                         </div>
                     )}
+                    
+                    {/* Dates */}
+                    <div className="grid grid-cols-2 gap-4">
+                        <div>
+                            <label htmlFor="dueDate" className="block text-sm font-medium">Vencimento <span className="text-red-500">*</span></label>
+                            <input 
+                                id="dueDate" 
+                                type="date" 
+                                value={dueDate} 
+                                onChange={e => setDueDate(e.target.value)} 
+                                className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
+                            />
+                        </div>
+
+                        {status === TransactionStatus.PAID && !isCreditCard && (
+                            <div className="animate-fade-in">
+                                <label htmlFor="paymentDate" className="block text-sm font-medium text-green-600 dark:text-green-400">Pagamento <span className="text-red-500">*</span></label>
+                                <input 
+                                    id="paymentDate" 
+                                    type="date" 
+                                    value={paymentDate} 
+                                    onChange={e => setPaymentDate(e.target.value)} 
+                                    className={`mt-1 block w-full rounded-md bg-green-50 dark:bg-gray-700 border-green-300 dark:border-green-600 shadow-sm focus:border-green-500 focus:ring-green-500 px-3 py-2 ${dateError ? 'border-red-500' : ''}`}
+                                />
+                            </div>
+                        )}
+                    </div>
 
                     {dateError && <p className="text-xs text-red-500 mt-1">{dateError}</p>}
+                    {error && <p className="text-xs text-red-500 mt-1">{error}</p>}
 
                     <div className="flex justify-end space-x-4 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 rounded-md text-gray-700 dark:text-gray-200 bg-gray-200 dark:bg-gray-600 hover:bg-gray-300 dark:hover:bg-gray-500">Cancelar</button>
@@ -230,9 +319,19 @@ const ConfirmationModal: React.FC<{ message: string; onConfirm: () => void; onCa
 );
 
 const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTransaction, deleteTransaction }) => {
+    const { apiCall } = useContext(AuthContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCost, setEditingCost] = useState<CashTransaction | null>(null);
     const [deletingCostId, setDeletingCostId] = useState<string | null>(null);
+    const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+
+    useEffect(() => {
+        const fetchAccounts = async () => {
+            const data = await apiCall('financial', 'GET');
+            if (data) setAccounts(data);
+        };
+        fetchAccounts();
+    }, [apiCall, isModalOpen]); // Refresh when modal opens
 
     const getCurrentCompetency = () => {
         const now = new Date();
@@ -339,7 +438,7 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
 
     return (
         <div className="container mx-auto">
-            {isModalOpen && <CostModal costToEdit={editingCost} onClose={handleCloseModal} onSave={handleSaveCost} />}
+            {isModalOpen && <CostModal costToEdit={editingCost} accounts={accounts} onClose={handleCloseModal} onSave={handleSaveCost} />}
             {deletingCostId && (
                 <ConfirmationModal 
                     message="Tem certeza que deseja excluir este custo? Esta ação não pode ser desfeita."
