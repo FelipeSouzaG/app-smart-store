@@ -7,42 +7,8 @@ import { AuthContext } from '../contexts/AuthContext';
 interface CashProps {
     transactions: CashTransaction[];
     updateTransactionStatus: (transactionId: string, status: TransactionStatus) => void;
-    // We need a more robust update function that handles dates, not just status
-    // Assuming updateTransactionStatus can be extended or we use a more generic update if available via props
-    // For this specific component, I'll assume we might need to fetch the full update function or adapt.
-    // However, looking at Layout.tsx, `updateTransactionStatus` only takes ID and status. 
-    // To implement the requested feature properly, we should use `updateTransaction` logic from parent,
-    // but since `updateTransaction` isn't passed directly to Cash in `Layout.tsx`, 
-    // we will simulate it by calling updateTransactionStatus but we really need to update the date.
-    
-    // *CORRECTION*: Layout.tsx passes `updateTransactionStatus` which calls `updateTransaction` internally.
-    // But `updateTransaction` in Layout.tsx expects a full object. 
-    // The `updateTransactionStatus` in Layout.tsx currently is:
-    // const updateTransactionStatus = async (transactionId: string, status: any) => {
-    //    const transactionToUpdate = transactions.find(t => t.id === transactionId);
-    //    if (transactionToUpdate) {
-    //        await updateTransaction({ ...transactionToUpdate, status });
-    //    }
-    // };
-    // This is insufficient for adding paymentDate. 
-    // I will add a local `onConfirmPayment` logic here that requires the parent to expose a way to update the date.
-    // Since I cannot change Layout.tsx in this specific change request block easily without making it huge, 
-    // I will assume `updateTransactionStatus` implies a full update or I will rely on the fact 
-    // that I am modifying `Cash.tsx` and can request `updateTransaction` directly if I change the interface.
-    
-    // Let's change the interface to accept `updateTransaction`.
-    // NOTE: This requires `Layout.tsx` update implicitly. 
-    // Ideally, the user request implied changing Cash component. 
-    // I will assume `updateTransaction` is passed or I will add it to the interface and assume Layout passes it.
-}
-
-// Extending Props to include full update capability
-interface ExtendedCashProps {
-    transactions: CashTransaction[];
-    // Replacing the simple status updater with the full update function for flexibility
-    updateTransaction?: (transaction: CashTransaction) => void; 
-    // Keep backward compatibility if needed, but we prefer updateTransaction
-    updateTransactionStatus: (transactionId: string, status: TransactionStatus) => void;
+    // We now receive the full update function to handle Date saving
+    updateTransaction: (transaction: CashTransaction) => void;
 }
 
 const StatusBadge: React.FC<{ status: TransactionStatus }> = ({ status }) => {
@@ -120,40 +86,10 @@ const PaymentDateModal: React.FC<{
     );
 };
 
-const Cash: React.FC<ExtendedCashProps> = ({ transactions, updateTransactionStatus }) => {
-    // Note: Since we don't have direct access to `updateTransaction` from props in the current Layout signature,
-    // we will have to hack `updateTransactionStatus` or assume the user updates Layout.tsx too.
-    // For this implementation to work correctly as requested, we need to pass `paymentDate` data up.
-    // However, `updateTransactionStatus` signature is (id, status).
-    // I will assume the parent component's `updateTransactionStatus` handles simple status toggle.
-    // But to save the date, we really need the full update.
-    // Since I cannot modify Layout.tsx in this specific response block easily without context of it being requested,
-    // I will implement the UI here. 
-    // *CRITICAL*: I will assume `updateTransactionStatus` essentially triggers a re-fetch or I will infer 
-    // that I need to emit a custom event or similar.
-    // Actually, looking at the previous Costs component, `updateTransaction` is available.
-    // I'll assume for Cash, we might need to modify Layout.tsx to pass `updateTransaction`.
-    // But to satisfy the prompt STRICTLY within the files requested (and assuming Layout might be updated later or I update it implicitly via logic):
-    
-    // Wait, the prompt says "Na guia Caixa... O botao condicional... deve abriu um modal".
-    // I will implement the internal logic. If `updateTransaction` isn't passed, I'll fallback to `updateTransactionStatus` 
-    // but that won't save the date.
-    // To make this work, I will actually inject the logic to call the API directly if needed or assume props are updated.
-    // Let's use `AuthContext` to get `apiCall` directly here to bypass Prop drilling limitation if necessary, 
-    // but better is to define `updateTransaction` in props and assume Layout provides it (I will update Layout too if needed, but user didn't ask to change Layout explicitly, but "change the app").
-    // I will assume Layout passes `updateTransaction` now because Costs has it. 
-    // Ah, wait, Cash props in Layout are: `<Cash transactions={transactions} updateTransactionStatus={updateTransactionStatus} />`.
-    // It does NOT pass updateTransaction. 
-    // I will use `useContext(AuthContext)` to get `apiCall` and perform the update directly to ensure robustness without changing Layout.tsx signature if I can avoid it, OR I will modify `Layout.tsx` as well to be safe. 
-    // The prompt says "Change files...". I will update Layout.tsx to pass `updateTransaction` to Cash.
-
+const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, updateTransaction }) => {
     // State for Modal
     const [transactionToPay, setTransactionToPay] = useState<string | null>(null);
 
-    // Context for API call (Direct update if props fail)
-    // Actually, I'll modify Layout.tsx to pass `updateTransaction` to Cash. It's cleaner.
-    const { apiCall } = useContext(AuthContext);
-    
     // ... existing logic ...
     const getCurrentCompetency = () => {
         const now = new Date();
@@ -271,9 +207,9 @@ const Cash: React.FC<ExtendedCashProps> = ({ transactions, updateTransactionStat
                 paymentDate: safeDate 
             };
             
-            await apiCall(`transactions/${transaction.id}`, 'PUT', updated);
-            // Trigger UI update via the prop (even if redundant, it triggers fetch in parent)
-            updateTransactionStatus(transaction.id, TransactionStatus.PAID);
+            // Use parent updater to ensure state sync (fetching fresh data including date)
+            // DO NOT use updateTransactionStatus here, it causes overwrite of the paymentDate
+            updateTransaction(updated);
         }
         setTransactionToPay(null);
     };
@@ -282,10 +218,11 @@ const Cash: React.FC<ExtendedCashProps> = ({ transactions, updateTransactionStat
         const updated = {
             ...transaction,
             status: TransactionStatus.PENDING,
-            paymentDate: null
+            // Explicitly set paymentDate to undefined/null when reverting
+            // Casting to any to allow undefined if interface is strict
+            paymentDate: undefined as any
         };
-        await apiCall(`transactions/${transaction.id}`, 'PUT', updated);
-        updateTransactionStatus(transaction.id, TransactionStatus.PENDING);
+        updateTransaction(updated);
     };
 
     return (
