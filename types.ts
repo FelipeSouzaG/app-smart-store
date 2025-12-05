@@ -142,6 +142,9 @@ export interface CashTransaction {
   serviceOrderId?: string; // Link to the service order
   purchaseId?: string;
   saleId?: string;
+  // NEW: Linked Financial Info
+  financialAccountId?: string;
+  paymentMethodId?: string;
 }
 
 export enum ServiceOrderStatus {
@@ -366,4 +369,32 @@ export interface Supplier {
   name: string;
   contactPerson?: string;
   phone: string;
+}
+
+// --- NEW FINANCIAL TYPES ---
+
+export interface ReceivingRule {
+  id?: string;
+  type: 'Pix' | 'Debit' | 'Credit';
+  installmentsMin: number;
+  installmentsMax: number;
+  taxRate: number; // %
+  daysToReceive: number;
+}
+
+export interface PaymentMethodConfig {
+  id?: string;
+  name: string; // "Pix Inter"
+  type: 'Pix' | 'Debit' | 'Boleto' | 'Credit';
+  closingDay?: number; // Only for Credit
+  dueDay?: number; // Only for Credit
+}
+
+export interface FinancialAccount {
+  id: string;
+  bankName: string;
+  balance: number;
+  receivingRules: ReceivingRule[];
+  paymentMethods: PaymentMethodConfig[];
+  isDefault?: boolean;
 }
