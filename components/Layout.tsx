@@ -113,7 +113,9 @@ const Layout: React.FC = () => {
     // Check Billing Status
     useEffect(() => {
         const checkBilling = async () => {
+            // Only check billing if we have a token (AuthContext provided it from memory)
             if (!token) return;
+            
             try {
                 const response = await fetch(`${SAAS_API_URL}/subscription/status`, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -193,8 +195,11 @@ const Layout: React.FC = () => {
         }
     };
     
+    // Initial Data Fetch
     useEffect(() => {
-        if (token) {
+        // We rely on 'user' being present, which means authentication (cookie) is set.
+        // We don't need 'token' for these internal calls as apiCall uses credentials: 'include'.
+        if (user) {
             const fetchSettings = async () => {
                 const settings = await apiCall('settings', 'GET');
                 if (settings) {
@@ -225,7 +230,7 @@ const Layout: React.FC = () => {
                fetchData('suppliers', setSuppliers);
             }
         }
-    }, [token, user]); 
+    }, [user]); 
 
     // ... existing handlers ...
     const handleSaveGoals = async (newGoals: KpiGoals) => {
