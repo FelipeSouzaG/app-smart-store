@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useMemo, useContext, useRef } from 'react';
 import { ServiceOrder, ServiceOrderStatus, Service, ServiceBrand, Customer, KpiGoals, PaymentMethod } from '../types';
 import { AuthContext } from '../contexts/AuthContext';
@@ -101,23 +102,36 @@ const OSModal: React.FC<{
     const [cpfError, setCpfError] = useState('');
     const [isValidatingCpf, setIsValidatingCpf] = useState(false);
 
+    // New hierarchy: Type (Name) -> Brand -> Model
+    const [selectedServiceName, setSelectedServiceName] = useState('');
     const [selectedBrand, setSelectedBrand] = useState<string>('');
     const [selectedModel, setSelectedModel] = useState('');
     const [selectedServiceId, setSelectedServiceId] = useState<string>('');
     
     const selectedService = services.find(s => s.id === selectedServiceId);
     
-    const availableBrands = useMemo(() => [...new Set(services.map(s => s.brand))], [services]);
-    
-    const availableModels = useMemo(() => {
-        if (!selectedBrand) return [];
-        return [...new Set(services.filter(s => s.brand === selectedBrand).map(s => s.model))];
-    }, [services, selectedBrand]);
+    // 1. Available Service Names (Types)
+    const availableServiceNames = useMemo(() => {
+        return [...new Set(services.map(s => s.name))].sort();
+    }, [services]);
 
-    const availableServices = useMemo(() => {
-        if (!selectedBrand || !selectedModel) return [];
-        return services.filter(s => s.brand === selectedBrand && s.model === selectedModel);
-    }, [services, selectedBrand, selectedModel]);
+    // 2. Available Brands (Filtered by selected Name)
+    const availableBrands = useMemo(() => {
+        if (!selectedServiceName) return [];
+        return [...new Set(services
+            .filter(s => s.name === selectedServiceName)
+            .map(s => s.brand)
+        )].sort();
+    }, [services, selectedServiceName]);
+    
+    // 3. Available Models (Filtered by Name AND Brand)
+    const availableModels = useMemo(() => {
+        if (!selectedServiceName || !selectedBrand) return [];
+        return [...new Set(services
+            .filter(s => s.name === selectedServiceName && s.brand === selectedBrand)
+            .map(s => s.model)
+        )].sort();
+    }, [services, selectedServiceName, selectedBrand]);
 
     const handleCurrencyChange = (value: string, setter: React.Dispatch<React.SetStateAction<string>>) => {
         setter(formatMoney(value));
@@ -185,10 +199,12 @@ const OSModal: React.FC<{
             
             const serviceForEdit = services.find(s => s.id === orderToEdit.serviceId);
             if (serviceForEdit) {
-                setSelectedBrand(serviceForEdit.brand);
+                setSelectedServiceName(serviceForEdit.name);
+                // Use timeouts to allow state to settle for dependent dropdowns
                 setTimeout(() => {
-                    setSelectedModel(serviceForEdit.model);
+                    setSelectedBrand(serviceForEdit.brand);
                     setTimeout(() => {
+                        setSelectedModel(serviceForEdit.model);
                         setSelectedServiceId(serviceForEdit.id);
                     }, 0);
                 }, 0);
@@ -199,6 +215,7 @@ const OSModal: React.FC<{
             setCustomerWhatsapp('');
             setCustomerCnpjCpf('');
             setCustomerContact('');
+            setSelectedServiceName('');
             setSelectedBrand('');
             setSelectedModel('');
             setSelectedServiceId('');
@@ -254,6 +271,12 @@ const OSModal: React.FC<{
         }
     };
 
+    const handleServiceNameChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        setSelectedServiceName(e.target.value);
+        setSelectedBrand('');
+        setSelectedModel('');
+        setSelectedServiceId('');
+    };
 
     const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         setSelectedBrand(e.target.value);
@@ -262,8 +285,21 @@ const OSModal: React.FC<{
     };
     
     const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        setSelectedModel(e.target.value);
-        setSelectedServiceId('');
+        const newModel = e.target.value;
+        setSelectedModel(newModel);
+        
+        // Find the specific service ID based on the 3 selected parameters
+        const specificService = services.find(s => 
+            s.name === selectedServiceName && 
+            s.brand === selectedBrand && 
+            s.model === newModel
+        );
+        
+        if (specificService) {
+            setSelectedServiceId(specificService.id);
+        } else {
+            setSelectedServiceId('');
+        }
     };
     
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -364,25 +400,28 @@ const OSModal: React.FC<{
 
                      <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <h3 className="text-md font-semibold">Seleção de Serviço</h3>
+                        {/* 1. Type */}
                         <div>
-                            <label className="block text-sm font-medium">1. Marca</label>
-                             <select value={selectedBrand} onChange={handleBrandChange} required className="mt-1 block w-full rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2">
+                            <label className="block text-sm font-medium">1. Tipo de Serviço</label>
+                             <select value={selectedServiceName} onChange={handleServiceNameChange} required className="mt-1 block w-full rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2">
+                                 <option value="" disabled>Selecione o tipo...</option>
+                                 {availableServiceNames.map(name => <option key={name} value={name}>{name}</option>)}
+                             </select>
+                        </div>
+                        {/* 2. Brand */}
+                        <div>
+                            <label className="block text-sm font-medium">2. Marca</label>
+                             <select value={selectedBrand} onChange={handleBrandChange} required disabled={!selectedServiceName} className="mt-1 block w-full rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2 disabled:opacity-50">
                                  <option value="" disabled>Selecione a marca...</option>
                                  {availableBrands.map(b => <option key={b} value={b}>{b}</option>)}
                              </select>
                         </div>
+                        {/* 3. Model */}
                         <div>
-                            <label className="block text-sm font-medium">2. Modelo</label>
-                             <select value={selectedModel} onChange={handleModelChange} required disabled={!selectedBrand || availableModels.length === 0} className="mt-1 block w-full rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2 disabled:opacity-50">
+                            <label className="block text-sm font-medium">3. Modelo</label>
+                             <select value={selectedModel} onChange={handleModelChange} required disabled={!selectedBrand} className="mt-1 block w-full rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2 disabled:opacity-50">
                                  <option value="" disabled>Selecione o modelo...</option>
                                  {availableModels.map(m => <option key={m} value={m}>{m}</option>)}
-                             </select>
-                        </div>
-                         <div>
-                            <label className="block text-sm font-medium">3. Tipo de Serviço</label>
-                             <select value={selectedServiceId} onChange={e => setSelectedServiceId(e.target.value)} required disabled={!selectedModel || availableServices.length === 0} className="mt-1 block w-full rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2 disabled:opacity-50">
-                                 <option value="" disabled>Selecione o serviço...</option>
-                                 {availableServices.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
                              </select>
                         </div>
                     </div>
