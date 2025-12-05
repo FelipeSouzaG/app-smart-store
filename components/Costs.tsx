@@ -90,9 +90,9 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
         }
         if (dateError) return;
         
-        // Final check for required date if PAID
-        if (status === TransactionStatus.PAID && !dueDate) {
-             setDateError('Data do pagamento é obrigatória.');
+        // Ensure date is present (redundant check for safety, button should be disabled)
+        if (!dueDate) {
+             setDateError('A data é obrigatória.');
              return;
         }
 
@@ -117,7 +117,8 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
         }
     };
     
-    const isSaveDisabled = !description || !amount || parseCurrency(amount) <= 0 || !!dateError || (status === TransactionStatus.PAID && !dueDate);
+    // Button is disabled if any required field is missing or invalid
+    const isSaveDisabled = !description || !amount || parseCurrency(amount) <= 0 || !!dateError || !dueDate;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -147,7 +148,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
                     </div>
                     <div>
                         <label htmlFor="dueDate" className="block text-sm font-medium">
-                            {status === TransactionStatus.PAID ? 'Data do Pagamento' : 'Data de Vencimento'} {status !== TransactionStatus.PAID && '(Opcional)'}
+                            {status === TransactionStatus.PAID ? 'Data do Pagamento' : 'Data de Vencimento'}
                         </label>
                         <input 
                             id="dueDate" 
