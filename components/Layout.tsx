@@ -379,9 +379,9 @@ const Layout: React.FC = () => {
         const result = await apiCall('users/profile', 'PUT', userData);
         if (result) {
             updateUserInContext(result);
-            alert('Perfil atualizado com sucesso!');
-            setActivePage(user?.role === 'technician' ? 'sales' : 'dashboard');
+            return result;
         }
+        throw new Error('Falha na atualização');
     };
     const handleAddCustomer = async (customerData: any) => {
         const result = await apiCall('customers', 'POST', customerData);
