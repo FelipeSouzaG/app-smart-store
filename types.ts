@@ -1,3 +1,4 @@
+
 // This file is now used by both frontend and backend (in dev) for type consistency.
 
 export enum UserRole {
@@ -203,6 +204,7 @@ export interface CompanyInfo {
 }
 
 export interface KpiGoals {
+  tenantName?: string; // Slug provided by backend
   isSetupComplete?: boolean; // Flag for first run wizard
   // Basic Goals
   predictedAvgMargin: number; // As a percentage, e.g., 40 for 40%
