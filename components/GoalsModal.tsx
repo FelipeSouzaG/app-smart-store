@@ -28,7 +28,8 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
     const [goals, setGoals] = useState(currentGoals);
     const [currentStep, setCurrentStep] = useState(0); // 0: Company, 1: Goals, 2: Pricing
     const [cepLoading, setCepLoading] = useState(false);
-    const [cepError, setCepError] = useState('');
+    const [cepStatus, setCepStatus] = useState<'idle' | 'valid' | 'invalid'>('idle');
+    const [cepMessage, setCepMessage] = useState('');
     
     // Ensure form updates if parent props change (e.g. async fetch)
     useEffect(() => {
@@ -98,31 +99,62 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
 
     const handleAddressChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value } = e.target;
+        let formattedValue = value;
+
+        // Validations for Address Fields
+        if (name === 'cep') {
+            // Remove non-digits and mask: 00.000-000
+            formattedValue = value.replace(/\D/g, '')
+                                  .replace(/^(\d{2})(\d)/, '$1.$2')
+                                  .replace(/\.(\d{3})(\d)/, '.$1-$2')
+                                  .substring(0, 10);
+            
+            // Reset validation if user is typing
+            if (cepStatus !== 'idle') {
+                setCepStatus('idle');
+                setCepMessage('');
+            }
+        }
+
+        if (name === 'number') {
+            // Allow only numbers
+            formattedValue = value.replace(/\D/g, '');
+        }
+
         setGoals(prev => ({
             ...prev,
             companyInfo: {
                 ...prev.companyInfo!,
                 address: {
                     ...prev.companyInfo!.address,
-                    [name]: value
+                    [name]: formattedValue
                 }
             }
         }));
     };
 
     const handleCepBlur = async (e: React.FocusEvent<HTMLInputElement>) => {
-        const cep = e.target.value.replace(/\D/g, '');
-        if (cep.length !== 8) return;
+        const rawCep = e.target.value.replace(/\D/g, '');
+        
+        if (rawCep.length !== 8) {
+            if (rawCep.length > 0) {
+                setCepStatus('invalid');
+                setCepMessage('CEP incompleto.');
+            }
+            return;
+        }
 
         setCepLoading(true);
-        setCepError('');
+        setCepStatus('idle');
+        setCepMessage('');
 
         try {
-            const response = await fetch(`https://viacep.com.br/ws/${cep}/json/`);
+            const response = await fetch(`https://viacep.com.br/ws/${rawCep}/json/`);
             const data = await response.json();
 
             if (data.erro) {
-                setCepError('CEP não encontrado.');
+                setCepStatus('invalid');
+                setCepMessage('CEP não encontrado.');
                 return;
             }
 
@@ -139,8 +171,11 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                     }
                 }
             }));
+            setCepStatus('valid');
+            setCepMessage(`CEP Encontrado: ${data.localidade}/${data.uf}`);
         } catch (err) {
-            setCepError('Erro ao buscar CEP.');
+            setCepStatus('invalid');
+            setCepMessage('Erro ao buscar CEP. Verifique a conexão.');
         } finally {
             setCepLoading(false);
         }
@@ -157,8 +192,9 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                     !!goals.companyInfo?.email &&
                     // Address Fields
                     !!goals.companyInfo?.address?.cep &&
+                    cepStatus === 'valid' && // Require valid CEP from API
                     !!goals.companyInfo?.address?.street &&
-                    !!goals.companyInfo?.address?.number &&
+                    !!goals.companyInfo?.address?.number && // Require Number
                     !!goals.companyInfo?.address?.neighborhood &&
                     !!goals.companyInfo?.address?.city &&
                     !!goals.companyInfo?.address?.state
@@ -169,7 +205,7 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                     goals.inventoryTurnoverGoal > 0 &&
                     goals.predictedAvgMargin > 0
                 );
-            case 2: // Pricing & Rules (Assuming defaults are valid numbers, mostly check negative logic if needed)
+            case 2: // Pricing & Rules
                 return (
                     goals.effectiveTaxRate >= 0 &&
                     goals.minContributionMargin >= 0
@@ -177,7 +213,7 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
             default:
                 return false;
         }
-    }, [goals, currentStep]);
+    }, [goals, currentStep, cepStatus]);
 
     const handleNext = () => {
         if (currentStep < steps.length - 1 && isStepValid) {
@@ -291,7 +327,7 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                                 <h4 className="text-md font-semibold mb-3 text-indigo-600 dark:text-indigo-400">Endereço</h4>
                                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                                     <div>
-                                        <label className="block text-sm font-medium mb-1">CEP <span className="text-red-500">*</span></label>
+                                        <label className="block text-sm font-medium mb-1">CEP (Somente Números) <span className="text-red-500">*</span></label>
                                         <div className="relative">
                                             <input 
                                                 type="text" 
@@ -299,12 +335,16 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                                                 value={goals.companyInfo?.address.cep || ''} 
                                                 onChange={handleAddressChange} 
                                                 onBlur={handleCepBlur}
-                                                className={`w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500 ${cepError ? 'border-red-500' : ''}`}
-                                                placeholder="00000-000"
+                                                className={`w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500 ${cepStatus === 'invalid' ? 'border-red-500 focus:ring-red-500' : cepStatus === 'valid' ? 'border-green-500 focus:ring-green-500' : ''}`}
+                                                placeholder="00.000-000"
                                             />
                                             {cepLoading && <span className="absolute right-3 top-3 text-xs text-indigo-500 animate-pulse">Buscando...</span>}
                                         </div>
-                                        {cepError && <p className="text-xs text-red-500 mt-1">{cepError}</p>}
+                                        {cepMessage && (
+                                            <p className={`text-xs mt-1 font-medium ${cepStatus === 'valid' ? 'text-green-600 dark:text-green-400' : 'text-red-500'}`}>
+                                                {cepMessage}
+                                            </p>
+                                        )}
                                     </div>
                                     <div className="md:col-span-2">
                                         <label className="block text-sm font-medium mb-1 text-gray-500">Rua (Logradouro) <span className="text-red-500">*</span></label>
@@ -318,7 +358,14 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                                     </div>
                                     <div>
                                         <label className="block text-sm font-medium mb-1">Número <span className="text-red-500">*</span></label>
-                                        <input type="text" name="number" value={goals.companyInfo?.address.number || ''} onChange={handleAddressChange} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500"/>
+                                        <input 
+                                            type="text" 
+                                            name="number" 
+                                            value={goals.companyInfo?.address.number || ''} 
+                                            onChange={handleAddressChange} 
+                                            className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500"
+                                            placeholder="123"
+                                        />
                                     </div>
                                     <div className="md:col-span-2">
                                         <label className="block text-sm font-medium mb-1">Complemento</label>
