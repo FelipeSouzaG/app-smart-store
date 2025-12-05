@@ -503,6 +503,7 @@ const Layout: React.FC = () => {
                 setActivePage={setActivePage} 
                 isOpen={isMobileMenuOpen}
                 onClose={() => setIsMobileMenuOpen(false)}
+                companyName={goals.companyInfo?.name || goals.tenantName} // Pass name to sidebar
             />
             
             {/* Main Content - Adjusted margin for Desktop only */}
