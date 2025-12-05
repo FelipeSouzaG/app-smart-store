@@ -413,7 +413,8 @@ const Layout: React.FC = () => {
             case 'dashboard': return <Dashboard transactions={transactions} ticketSales={ticketSales} products={products} goals={goals} onSaveGoals={handleSaveGoals} />;
             case 'sales': return <Sales products={products} onAddSale={handleAddSale} goals={goals} />;
             case 'sales-history': return <SalesHistory ticketSales={ticketSales} onDeleteSale={handleDeleteSale} setActivePage={setActivePage} />;
-            case 'cash': return <Cash transactions={transactions} updateTransactionStatus={updateTransactionStatus} />;
+            // Pass updateTransaction to Cash so it can perform full object updates (including paymentDate)
+            case 'cash': return <Cash transactions={transactions} updateTransactionStatus={updateTransactionStatus} updateTransaction={updateTransaction} />;
             case 'purchases': return <Purchases products={products} purchaseOrders={purchaseOrders} onAddPurchase={handleAddPurchase} onUpdatePurchase={updatePurchaseOrder} onDeletePurchase={deletePurchaseOrder} />;
             case 'costs': return <Costs transactions={transactions} addTransaction={addTransaction} updateTransaction={updateTransaction} deleteTransaction={deleteTransaction} />;
             case 'service-orders': return <ServiceOrders services={services} serviceOrders={serviceOrders} onAddServiceOrder={addServiceOrder} onUpdateServiceOrder={updateServiceOrder} onDeleteServiceOrder={deleteServiceOrder} onToggleStatus={toggleServiceOrderStatus} setActivePage={setActivePage} goals={goals} />;
