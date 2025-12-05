@@ -94,6 +94,22 @@ const Layout: React.FC = () => {
     // NEW: State for Migration Warning Modal
     const [showMigrationWarning, setShowMigrationWarning] = useState(false);
 
+    // Helper to check if critical company info is missing
+    const checkCriticalDataMissing = (settings: KpiGoals) => {
+        const info = settings.companyInfo;
+        if (!info) return true;
+        
+        // Basic Fields
+        if (!info.name || !info.cnpjCpf || !info.email || !info.phone) return true;
+        
+        // Address Fields
+        const addr = info.address;
+        if (!addr) return true;
+        if (!addr.cep || !addr.street || !addr.number || !addr.neighborhood || !addr.city || !addr.state) return true;
+
+        return false;
+    };
+
     // Check Billing Status
     useEffect(() => {
         const checkBilling = async () => {
@@ -170,7 +186,6 @@ const Layout: React.FC = () => {
         setShowMigrationWarning(false);
     };
 
-    // ... existing fetchData ...
     const fetchData = async (endpoint: string, setter: React.Dispatch<React.SetStateAction<any[]>>) => {
         const data = await apiCall(endpoint, 'GET');
         if (data) {
@@ -178,15 +193,20 @@ const Layout: React.FC = () => {
         }
     };
     
-    // ... existing useEffect ...
     useEffect(() => {
         if (token) {
             const fetchSettings = async () => {
                 const settings = await apiCall('settings', 'GET');
                 if (settings) {
                     setGoals(prev => ({ ...prev, ...settings }));
-                    if (settings.isSetupComplete === false && (user?.role === 'owner' || user?.role === 'manager')) {
+                    
+                    // Check if setup is complete OR if critical data is missing
+                    const isMissingData = checkCriticalDataMissing(settings);
+                    
+                    if ((settings.isSetupComplete === false || isMissingData) && (user?.role === 'owner' || user?.role === 'manager')) {
                         setShowSetupWizard(true);
+                    } else {
+                        setShowSetupWizard(false);
                     }
                 }
             };
@@ -211,7 +231,7 @@ const Layout: React.FC = () => {
     const handleSaveGoals = async (newGoals: KpiGoals) => {
         setGoals(newGoals);
         await apiCall('settings', 'PUT', newGoals);
-        if (newGoals.isSetupComplete) {
+        if (newGoals.isSetupComplete && !checkCriticalDataMissing(newGoals)) {
             setShowSetupWizard(false);
         }
     };
