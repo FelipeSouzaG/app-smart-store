@@ -54,12 +54,46 @@ const StatusBadge: React.FC<{ status: TransactionStatus }> = ({ status }) => {
     return <span className={`${baseClasses} ${statusClasses[status]}`}>{status}</span>;
 };
 
+// Helper to prevent timezone issues (Store/Read as UTC Noon)
+const createDateAsUTC = (dateString: string) => {
+    const [year, month, day] = dateString.split('-').map(Number);
+    // Create Date at 12:00:00 UTC to ensure it falls on correct calendar day despite TZ
+    return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
+};
+
+const formatDateUTC = (dateString: Date | string) => {
+    if (!dateString) return '-';
+    // Display using UTC timezone to match the stored strategy
+    return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
+};
+
 const PaymentDateModal: React.FC<{ 
     isOpen: boolean; 
     onClose: () => void; 
     onConfirm: (date: string) => void; 
 }> = ({ isOpen, onClose, onConfirm }) => {
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]);
+    const today = new Date().toISOString().split('T')[0];
+    const [date, setDate] = useState(today);
+    const [error, setError] = useState('');
+
+    useEffect(() => {
+        if (isOpen) {
+            setDate(today);
+            setError('');
+        }
+    }, [isOpen]);
+
+    const handleConfirm = () => {
+        if (!date) {
+            setError('Data é obrigatória');
+            return;
+        }
+        if (date > today) {
+            setError('Data do pagamento não pode ser futura.');
+            return;
+        }
+        onConfirm(date);
+    };
 
     if (!isOpen) return null;
 
@@ -70,13 +104,16 @@ const PaymentDateModal: React.FC<{
                 <p className="mb-4 text-sm text-gray-600 dark:text-gray-300">Informe a data real do pagamento:</p>
                 <input 
                     type="date" 
-                    value={date} 
+                    value={date}
+                    max={today}
                     onChange={(e) => setDate(e.target.value)} 
-                    className="w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2 mb-6"
+                    className={`w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2 mb-2 ${error ? 'border-red-500' : ''}`}
                 />
-                <div className="flex justify-end space-x-3">
+                {error && <p className="text-xs text-red-500 mb-4">{error}</p>}
+                
+                <div className="flex justify-end space-x-3 mt-4">
                     <button onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 dark:bg-gray-700 hover:bg-gray-300 text-gray-800 dark:text-gray-200">Cancelar</button>
-                    <button onClick={() => onConfirm(date)} className="px-4 py-2 rounded-md bg-green-600 hover:bg-green-700 text-white font-bold">Confirmar</button>
+                    <button onClick={handleConfirm} className="px-4 py-2 rounded-md bg-green-600 hover:bg-green-700 text-white font-bold">Confirmar</button>
                 </div>
             </div>
         </div>
@@ -115,6 +152,7 @@ const Cash: React.FC<ExtendedCashProps> = ({ transactions, updateTransactionStat
 
     // Context for API call (Direct update if props fail)
     // Actually, I'll modify Layout.tsx to pass `updateTransaction` to Cash. It's cleaner.
+    const { apiCall } = useContext(AuthContext);
     
     // ... existing logic ...
     const getCurrentCompetency = () => {
@@ -215,11 +253,6 @@ const Cash: React.FC<ExtendedCashProps> = ({ transactions, updateTransactionStat
     };
     
     // NEW: Handle Payment Logic
-    // We need to inject `updateTransaction` via Layout or context. 
-    // Since I can't easily change Layout props in this block without a huge file dump,
-    // I will access the API directly via AuthContext for the update action to ensure it works.
-    const { apiCall } = useContext(AuthContext);
-
     const handleInitiatePayment = (transactionId: string) => {
         setTransactionToPay(transactionId);
     };
@@ -229,15 +262,13 @@ const Cash: React.FC<ExtendedCashProps> = ({ transactions, updateTransactionStat
         
         const transaction = transactions.find(t => t.id === transactionToPay);
         if (transaction) {
-            // Update via API directly to ensure date is saved, then trigger parent refresh if possible
-            // Or assume parent refreshes on any change.
-            // Using `updateTransactionStatus` with a hack might fail if it doesn't accept object.
-            // So we use apiCall.
+            // Create UTC Date at Noon for safe storage
+            const safeDate = createDateAsUTC(date);
             
             const updated = {
                 ...transaction,
                 status: TransactionStatus.PAID,
-                paymentDate: new Date(new Date(date).setHours(12)) // Avoid TZ
+                paymentDate: safeDate 
             };
             
             await apiCall(`transactions/${transaction.id}`, 'PUT', updated);
@@ -348,8 +379,17 @@ const Cash: React.FC<ExtendedCashProps> = ({ transactions, updateTransactionStat
                                 </tr>
                             ) : (
                                 currentRecords.map(t => {
+                                    // Use UTC time to ensure day comparison is accurate
+                                    const today = new Date().setHours(0,0,0,0);
+                                    
+                                    const dueDateObj = t.dueDate ? new Date(t.dueDate) : null;
+                                    const paymentDateObj = t.paymentDate ? new Date(t.paymentDate) : null;
+
                                     // Overdue calculation: Pending AND Due Date < Today
-                                    const isLate = t.status === TransactionStatus.PENDING && t.dueDate && new Date(t.dueDate) < new Date(new Date().setHours(0,0,0,0));
+                                    const isLate = t.status === TransactionStatus.PENDING && dueDateObj && dueDateObj.getTime() < today;
+                                    
+                                    // Paid Late: Paid AND PaymentDate > DueDate
+                                    const isPaidLate = t.status === TransactionStatus.PAID && paymentDateObj && dueDateObj && paymentDateObj.getTime() > dueDateObj.getTime();
 
                                     return (
                                     <tr key={t.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
@@ -359,22 +399,27 @@ const Cash: React.FC<ExtendedCashProps> = ({ transactions, updateTransactionStat
                                             {t.type === 'expense' && '-'} R$ {formatCurrencyNumber(t.amount)}
                                         </td>
                                         <td className="px-6 py-4"><StatusBadge status={t.status} /></td>
-                                        <td className="px-6 py-4">{new Date(t.timestamp).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
+                                        <td className="px-6 py-4">{formatDateUTC(t.timestamp)}</td>
                                         
                                         {/* Due Date with Overdue Logic */}
                                         <td className="px-6 py-4">
                                             {t.dueDate ? (
                                                 <div className={isLate ? "text-red-500 font-bold" : ""}>
-                                                    {new Date(t.dueDate).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}
+                                                    {formatDateUTC(t.dueDate)}
                                                     {isLate && <span className="block text-[10px] uppercase">Vencido</span>}
                                                 </div>
                                             ) : '-'}
                                         </td>
 
                                         {/* Payment Date */}
-                                        <td className="px-6 py-4 text-green-600 font-medium">
+                                        <td className={`px-6 py-4 font-medium ${isPaidLate ? "text-red-500 font-bold" : "text-green-600"}`}>
                                             {t.status === TransactionStatus.PAID && t.paymentDate 
-                                                ? new Date(t.paymentDate).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) 
+                                                ? (
+                                                    <div>
+                                                        {formatDateUTC(t.paymentDate)}
+                                                        {isPaidLate && <span className="block text-[10px] uppercase text-red-500">Atraso</span>}
+                                                    </div>
+                                                ) 
                                                 : '-'}
                                         </td>
 
