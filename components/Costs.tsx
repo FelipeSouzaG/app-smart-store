@@ -89,6 +89,12 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
             return;
         }
         if (dateError) return;
+        
+        // Final check for required date if PAID
+        if (status === TransactionStatus.PAID && !dueDate) {
+             setDateError('Data do pagamento é obrigatória.');
+             return;
+        }
 
         setError('');
 
@@ -111,7 +117,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, onClose, onSave }) =>
         }
     };
     
-    const isSaveDisabled = !description || !amount || parseCurrency(amount) <= 0 || !!dateError;
+    const isSaveDisabled = !description || !amount || parseCurrency(amount) <= 0 || !!dateError || (status === TransactionStatus.PAID && !dueDate);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
