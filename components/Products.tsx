@@ -85,11 +85,15 @@
             <svg className="w-5 h-5 text-gray-400 cursor-help hover:text-indigo-500 transition-colors" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
             </svg>
-            <div className="opacity-0 invisible group-hover:opacity-100 group-hover:visible absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl z-50 transition-all duration-200 pointer-events-none text-center leading-relaxed">
+            {/* 
+                Adjusted Positioning:
+                - `right-[-20px]`: Aligns the tooltip box mainly to the left of the icon (growing leftwards), 
+                  preventing overflow on the right edge of modals/screens.
+                - Arrow is manually positioned with `right-6` to align with the icon.
+            */}
+            <div className="opacity-0 invisible group-hover:opacity-100 group-hover:visible absolute bottom-full right-[-20px] mb-2 w-64 p-3 bg-gray-900 text-white text-xs rounded-lg shadow-xl z-50 transition-all duration-200 pointer-events-none text-center leading-relaxed">
                 {text}
-                <svg className="absolute text-gray-900 h-2 w-full left-0 top-full" x="0px" y="0px" viewBox="0 0 255 255">
-                    <polygon className="fill-current" points="0,0 127.5,127.5 255,0" />
-                </svg>
+                <div className="absolute top-full right-6 -mt-[1px] border-4 border-transparent border-t-gray-900"></div>
             </div>
         </div>
     );
@@ -705,3 +709,4 @@
     };
 
     export default Products;
+    
