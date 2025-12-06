@@ -99,7 +99,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     // Derived Logic
     const isCashBox = selectedAccountId === 'cash-box';
     const selectedAccount = useMemo(() => accounts.find(a => a.id === selectedAccountId), [accounts, selectedAccountId]);
-    const selectedMethod = useMemo(() => selectedAccount?.paymentMethods.find(m => m.id === selectedMethodId), [selectedAccount, selectedMethodId]);
+    const selectedMethod = useMemo(() => selectedAccount?.paymentMethods.find(m => (m.id || (m as any)._id) === selectedMethodId), [selectedAccount, selectedMethodId]);
     const isCreditCard = !isCashBox && selectedMethod?.type === 'Credit';
 
     const handleCurrencyChange = (value: string, setter: React.Dispatch<React.SetStateAction<string>>) => {
@@ -125,6 +125,15 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
         }
         setPaymentDate(newDate);
     };
+
+    // Effect to handle Status Change -> Date Prefill
+    useEffect(() => {
+        if (status === TransactionStatus.PAID && !costToEdit) {
+            // Auto-fill dates for new Paid transactions
+            setDueDate(today);
+            setPaymentDate(today);
+        }
+    }, [status, today, costToEdit]);
 
     useEffect(() => {
         if (costToEdit) {
@@ -226,8 +235,8 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             amount: numericAmount,
             type: TransactionType.EXPENSE,
             category,
-            // FORCE PENDING if Credit Card (to be managed in invoice), otherwise use selected status
-            status: isCreditCard ? TransactionStatus.PENDING : status, 
+            // Even if User selects PAID, Credit Card items are managed via Invoice, so Status reflects intention but Backend handles Table Routing
+            status: status, 
             timestamp: createDateAsUTC(purchaseDate), // Competence
             financialAccountId: selectedAccountId || undefined,
             paymentMethodId: (!isCashBox && selectedMethodId) ? selectedMethodId : undefined,
@@ -238,7 +247,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
         
         if (isCreditCard) {
             // Backend handles due date calculation based on billing cycle. 
-            // Payment date is null until bill is paid.
+            // Payment date is irrelevant for the individual CC item in Cash Flow (it goes to CC Table)
             transactionPayload.dueDate = null; 
             transactionPayload.paymentDate = null;
         } else {
@@ -374,7 +383,12 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                                         className="w-full rounded-lg text-sm p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
                                     >
                                         <option value="">Selecione...</option>
-                                        {selectedAccount?.paymentMethods.map(m => <option key={m.id} value={m.id}>{m.name} ({m.type})</option>)}
+                                        {/* Robust handling for ID vs _id */}
+                                        {selectedAccount?.paymentMethods.map(m => (
+                                            <option key={m.id || (m as any)._id} value={m.id || (m as any)._id}>
+                                                {m.name} ({m.type})
+                                            </option>
+                                        ))}
                                     </select>
                                 </div>
                             )}
@@ -396,7 +410,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                                     </div>
                                     <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
                                         <p>📅 <strong>Vencimento da Fatura:</strong> {creditCardEstimate || 'Calculando...'}</p>
-                                        <p className="text-orange-500 font-medium">⚠ O custo será registrado no cartão e o status ficará vinculado à fatura.</p>
+                                        <p className="text-orange-500 font-medium">ℹ️ O custo será registrado na tabela do Cartão e o status seguirá a fatura.</p>
                                     </div>
                                 </div>
                             )}
