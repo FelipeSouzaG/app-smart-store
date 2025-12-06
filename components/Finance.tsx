@@ -50,7 +50,22 @@ const Finance: React.FC = () => {
         if (!bankName) return alert('Nome do banco é obrigatório');
         
         setLoading(true);
-        const payload = { bankName, receivingRules, paymentMethods };
+        // Clean data before sending (remove temporary IDs if needed, handle numbers)
+        const payload = { 
+            bankName, 
+            receivingRules: receivingRules.map(r => ({
+                ...r,
+                installmentsMin: r.installmentsMin || 1,
+                installmentsMax: r.installmentsMax || 1,
+                taxRate: r.taxRate || 0,
+                daysToReceive: r.daysToReceive || 0
+            })), 
+            paymentMethods: paymentMethods.map(p => ({
+                ...p,
+                closingDay: p.closingDay || undefined,
+                dueDay: p.dueDay || undefined
+            }))
+        };
         
         if (editingAccount) {
             await apiCall(`financial/${editingAccount.id}`, 'PUT', payload);
@@ -76,7 +91,9 @@ const Finance: React.FC = () => {
     
     const updateReceivingRule = (index: number, field: keyof ReceivingRule, value: any) => {
         const updated = [...receivingRules];
-        updated[index] = { ...updated[index], [field]: value };
+        // Safe number parsing
+        const safeValue = typeof value === 'number' && isNaN(value) ? 0 : value;
+        updated[index] = { ...updated[index], [field]: safeValue };
         setReceivingRules(updated);
     };
 
@@ -90,7 +107,9 @@ const Finance: React.FC = () => {
 
     const updatePaymentMethod = (index: number, field: keyof PaymentMethodConfig, value: any) => {
         const updated = [...paymentMethods];
-        updated[index] = { ...updated[index], [field]: value };
+        // Safe number parsing
+        const safeValue = typeof value === 'number' && isNaN(value) ? 0 : value;
+        updated[index] = { ...updated[index], [field]: safeValue };
         setPaymentMethods(updated);
     };
 
@@ -297,4 +316,3 @@ const Finance: React.FC = () => {
 };
 
 export default Finance;
-  
