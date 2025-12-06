@@ -145,6 +145,7 @@ const CostPaymentModal: React.FC<{
                         <div>
                             <label className="block text-sm font-medium mb-1">Vencimento</label>
                             <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600" />
+                            <p className="text-xs text-gray-500 mt-1">Será registrado como uma despesa pendente no <strong>Caixa</strong>.</p>
                         </div>
                     )}
 
@@ -189,7 +190,7 @@ const CostPaymentModal: React.FC<{
                                         {Array.from({length: 12}, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}x</option>)}
                                     </select>
                                     <p className="text-[10px] text-yellow-700 dark:text-yellow-300 mt-2 font-medium">
-                                        ℹ️ Ao usar crédito, a despesa será lançada na <strong>Fatura do Cartão (Financeiro)</strong> como "Pendente", respeitando a data de fechamento.
+                                        ℹ️ A despesa será registrada na <strong>Fatura do Cartão</strong> (Menu Financeiro).
                                     </p>
                                 </div>
                             )}
@@ -198,6 +199,7 @@ const CostPaymentModal: React.FC<{
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Data do Pagamento</label>
                                     <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600" />
+                                    <p className="text-xs text-gray-500 mt-1">Será registrado como uma saída no <strong>Caixa</strong>.</p>
                                 </div>
                             )}
                         </>
@@ -215,11 +217,12 @@ const CostPaymentModal: React.FC<{
 
 const OSModal: React.FC<{ 
     services: Service[], 
-    orderToEdit?: ServiceOrder | null,
+    orderToEdit?: ServiceOrder | null, 
     onClose: () => void; 
     onSave: (order: Omit<ServiceOrder, 'id' | 'createdAt' | 'status'> | ServiceOrder) => void;
     goals: KpiGoals;
 }> = ({ services, orderToEdit, onClose, onSave, goals }) => {
+    // ... [No changes to OSModal code, keeping as is] ...
     const { apiCall } = useContext(AuthContext);
     const [customerName, setCustomerName] = useState('');
     const [customerWhatsapp, setCustomerWhatsapp] = useState('');
@@ -229,11 +232,8 @@ const OSModal: React.FC<{
     const [errors, setErrors] = useState<{ name?: string; whatsapp?: string }>({});
     const [isCustomerLoading, setIsCustomerLoading] = useState(false);
     const [foundCustomer, setFoundCustomer] = useState<Customer | null>(null);
-    
     const [cpfError, setCpfError] = useState('');
     const [isValidatingCpf, setIsValidatingCpf] = useState(false);
-
-    // New hierarchy: Type (Name) -> Brand -> Model
     const [selectedServiceName, setSelectedServiceName] = useState('');
     const [selectedBrand, setSelectedBrand] = useState<string>('');
     const [selectedModel, setSelectedModel] = useState('');
@@ -241,27 +241,18 @@ const OSModal: React.FC<{
     
     const selectedService = services.find(s => s.id === selectedServiceId);
     
-    // 1. Available Service Names (Types)
     const availableServiceNames = useMemo(() => {
         return [...new Set(services.map(s => s.name))].sort();
     }, [services]);
 
-    // 2. Available Brands (Filtered by selected Name)
     const availableBrands = useMemo(() => {
         if (!selectedServiceName) return [];
-        return [...new Set(services
-            .filter(s => s.name === selectedServiceName)
-            .map(s => s.brand)
-        )].sort();
+        return [...new Set(services.filter(s => s.name === selectedServiceName).map(s => s.brand))].sort();
     }, [services, selectedServiceName]);
     
-    // 3. Available Models (Filtered by Name AND Brand)
     const availableModels = useMemo(() => {
         if (!selectedServiceName || !selectedBrand) return [];
-        return [...new Set(services
-            .filter(s => s.name === selectedServiceName && s.brand === selectedBrand)
-            .map(s => s.model)
-        )].sort();
+        return [...new Set(services.filter(s => s.name === selectedServiceName && s.brand === selectedBrand).map(s => s.model))].sort();
     }, [services, selectedServiceName, selectedBrand]);
 
     const handleCurrencyChange = (value: string, setter: React.Dispatch<React.SetStateAction<string>>) => {
@@ -295,7 +286,6 @@ const OSModal: React.FC<{
         return serviceBaseCost + numericOtherCosts;
     }, [serviceBaseCost, numericOtherCosts]);
 
-
     useEffect(() => {
         const handler = setTimeout(async () => {
             const cleanedPhone = customerWhatsapp.replace(/\D/g, '');
@@ -315,10 +305,8 @@ const OSModal: React.FC<{
                  setFoundCustomer(null);
             }
         }, 500);
-
         return () => clearTimeout(handler);
     }, [customerWhatsapp, apiCall]);
-
 
     useEffect(() => {
         if (orderToEdit) {
@@ -327,11 +315,9 @@ const OSModal: React.FC<{
             setCustomerCnpjCpf(orderToEdit.customerCnpjCpf ? formatRegister(orderToEdit.customerCnpjCpf) : '');
             setCustomerContact(orderToEdit.customerContact || '');
             setOtherCosts(formatMoney((orderToEdit.otherCosts * 100).toFixed(0)));
-            
             const serviceForEdit = services.find(s => s.id === orderToEdit.serviceId);
             if (serviceForEdit) {
                 setSelectedServiceName(serviceForEdit.name);
-                // Use timeouts to allow state to settle for dependent dropdowns
                 setTimeout(() => {
                     setSelectedBrand(serviceForEdit.brand);
                     setTimeout(() => {
@@ -340,7 +326,6 @@ const OSModal: React.FC<{
                     }, 0);
                 }, 0);
             }
-
         } else {
             setCustomerName('');
             setCustomerWhatsapp('');
@@ -358,12 +343,8 @@ const OSModal: React.FC<{
 
     const validateForm = () => {
         const newErrors: { name?: string; whatsapp?: string } = {};
-        if (!validateName(customerName)) {
-            newErrors.name = 'Nome inválido (mín. 3 caracteres).';
-        }
-        if (!customerWhatsapp || !validatePhone(customerWhatsapp)) {
-            newErrors.whatsapp = 'Número de Whatsapp inválido ou vazio.';
-        }
+        if (!validateName(customerName)) newErrors.name = 'Nome inválido (mín. 3 caracteres).';
+        if (!customerWhatsapp || !validatePhone(customerWhatsapp)) newErrors.whatsapp = 'Número de Whatsapp inválido ou vazio.';
         setErrors(newErrors);
         return Object.keys(newErrors).length === 0;
     };
@@ -371,17 +352,8 @@ const OSModal: React.FC<{
     const handleCnpjBlur = async () => {
         const cleanDoc = customerCnpjCpf.replace(/\D/g, '');
         const cleanPhone = customerWhatsapp.replace(/\D/g, '');
-
-        if (!cleanDoc) {
-            setCpfError('');
-            return;
-        }
-
-        if (!validateRegister(customerCnpjCpf)) {
-            setCpfError('CPF/CNPJ inválido.');
-            return;
-        }
-
+        if (!cleanDoc) { setCpfError(''); return; }
+        if (!validateRegister(customerCnpjCpf)) { setCpfError('CPF/CNPJ inválido.'); return; }
         setIsValidatingCpf(true);
         try {
             const existingCustomer = await apiCall(`customers/by-document/${cleanDoc}`, 'GET');
@@ -402,46 +374,20 @@ const OSModal: React.FC<{
         }
     };
 
-    const handleServiceNameChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        setSelectedServiceName(e.target.value);
-        setSelectedBrand('');
-        setSelectedModel('');
-        setSelectedServiceId('');
-    };
-
-    const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
-        setSelectedBrand(e.target.value);
-        setSelectedModel('');
-        setSelectedServiceId('');
-    };
-    
+    const handleServiceNameChange = (e: React.ChangeEvent<HTMLSelectElement>) => { setSelectedServiceName(e.target.value); setSelectedBrand(''); setSelectedModel(''); setSelectedServiceId(''); };
+    const handleBrandChange = (e: React.ChangeEvent<HTMLSelectElement>) => { setSelectedBrand(e.target.value); setSelectedModel(''); setSelectedServiceId(''); };
     const handleModelChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newModel = e.target.value;
         setSelectedModel(newModel);
-        
-        // Find the specific service ID based on the 3 selected parameters
-        const specificService = services.find(s => 
-            s.name === selectedServiceName && 
-            s.brand === selectedBrand && 
-            s.model === newModel
-        );
-        
-        if (specificService) {
-            setSelectedServiceId(specificService.id);
-        } else {
-            setSelectedServiceId('');
-        }
+        const specificService = services.find(s => s.name === selectedServiceName && s.brand === selectedBrand && s.model === newModel);
+        if (specificService) setSelectedServiceId(specificService.id); else setSelectedServiceId('');
     };
     
     const handleNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const val = e.target.value;
         setCustomerName(val);
         if (validateName(val)) {
-            setErrors(prev => {
-                const newErrors = { ...prev };
-                delete newErrors.name;
-                return newErrors;
-            });
+            setErrors(prev => { const newErrors = { ...prev }; delete newErrors.name; return newErrors; });
         }
     };
 
@@ -449,23 +395,14 @@ const OSModal: React.FC<{
         const val = formatPhone(e.target.value);
         setCustomerWhatsapp(val);
         if (validatePhone(val) && val) {
-            setErrors(prev => {
-                const newErrors = { ...prev };
-                delete newErrors.whatsapp;
-                return newErrors;
-            });
+            setErrors(prev => { const newErrors = { ...prev }; delete newErrors.whatsapp; return newErrors; });
         }
     };
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!validateForm()) return;
-        
-        if (!selectedService) {
-            alert("Por favor, selecione um serviço válido.");
-            return;
-        }
-
+        if (!selectedService) { alert("Por favor, selecione um serviço válido."); return; }
         const payload = {
             customerName: formatName(customerName),
             customerWhatsapp: formatPhone(customerWhatsapp),
@@ -478,12 +415,7 @@ const OSModal: React.FC<{
             totalCost: totalServiceCost,
             otherCosts: numericOtherCosts
         };
-
-        if (orderToEdit) {
-            onSave({ ...orderToEdit, ...payload });
-        } else {
-            onSave(payload);
-        }
+        if (orderToEdit) onSave({ ...orderToEdit, ...payload }); else onSave(payload);
     };
     
     const isSaveDisabled = Object.keys(errors).length > 0 || !customerName || !customerWhatsapp || !selectedServiceId || !!cpfError || isValidatingCpf;
@@ -510,16 +442,7 @@ const OSModal: React.FC<{
                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium">CPF/CNPJ (Opcional)</label>
-                            <input 
-                                type="text" 
-                                value={customerCnpjCpf} 
-                                onChange={e => {
-                                    setCustomerCnpjCpf(formatRegister(e.target.value));
-                                    if(!e.target.value) setCpfError('');
-                                }} 
-                                onBlur={handleCnpjBlur}
-                                className={`mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2 ${cpfError ? 'border-red-500 focus:ring-red-500' : ''}`}
-                            />
+                            <input type="text" value={customerCnpjCpf} onChange={e => { setCustomerCnpjCpf(formatRegister(e.target.value)); if(!e.target.value) setCpfError(''); }} onBlur={handleCnpjBlur} className={`mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2 ${cpfError ? 'border-red-500 focus:ring-red-500' : ''}`}/>
                             {isValidatingCpf && <p className="text-xs text-blue-500 mt-1 animate-pulse">Validando...</p>}
                             {cpfError && <p className="text-xs text-red-500 mt-1 font-bold">{cpfError}</p>}
                         </div>
@@ -528,10 +451,8 @@ const OSModal: React.FC<{
                             <input type="text" value={customerContact} onChange={e => setCustomerContact(formatPhone(e.target.value))} className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"/>
                         </div>
                     </div>
-
                      <div className="space-y-4 p-4 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
                         <h3 className="text-md font-semibold">Seleção de Serviço</h3>
-                        {/* 1. Type */}
                         <div>
                             <label className="block text-sm font-medium">1. Tipo de Serviço</label>
                              <select value={selectedServiceName} onChange={handleServiceNameChange} required className="mt-1 block w-full rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2">
@@ -539,7 +460,6 @@ const OSModal: React.FC<{
                                  {availableServiceNames.map(name => <option key={name} value={name}>{name}</option>)}
                              </select>
                         </div>
-                        {/* 2. Brand */}
                         <div>
                             <label className="block text-sm font-medium">2. Marca</label>
                              <select value={selectedBrand} onChange={handleBrandChange} required disabled={!selectedServiceName} className="mt-1 block w-full rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2 disabled:opacity-50">
@@ -547,7 +467,6 @@ const OSModal: React.FC<{
                                  {availableBrands.map(b => <option key={b} value={b}>{b}</option>)}
                              </select>
                         </div>
-                        {/* 3. Model */}
                         <div>
                             <label className="block text-sm font-medium">3. Modelo</label>
                              <select value={selectedModel} onChange={handleModelChange} required disabled={!selectedBrand} className="mt-1 block w-full rounded-md bg-white dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2 disabled:opacity-50">
@@ -585,6 +504,7 @@ const PaymentModal: React.FC<{
     onClose: () => void, 
     onComplete: (paymentMethod: PaymentMethod, discount: number, finalPrice: number) => void 
 }> = ({ order, goals, onClose, onComplete }) => {
+    // ... [No changes to PaymentModal, keeping as is] ...
     const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<PaymentMethod | null>(null);
     const [isManualDiscountActive, setIsManualDiscountActive] = useState(false);
 
@@ -592,11 +512,9 @@ const PaymentModal: React.FC<{
 
     const discountInfo = useMemo(() => {
         if (!selectedPaymentMethod) return { discountPercent: 0, discountValue: 0 };
-
         if (!goals.autoApplyDiscount && !isManualDiscountActive) {
             return { discountPercent: 0, discountValue: 0 };
         }
-
         let discountPercent = 0;
         switch (selectedPaymentMethod) {
             case PaymentMethod.PIX:
@@ -634,12 +552,10 @@ const PaymentModal: React.FC<{
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md animate-fade-in">
                 <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Concluir e Pagar OS #{order.id}</h3>
-                
                 <div className="mb-4">
                     <p className="text-sm text-gray-500 dark:text-gray-400">Cliente: {order.customerName}</p>
                     <p className="text-lg font-semibold mt-2">Valor Total: R$ {formatCurrencyNumber(order.totalPrice)}</p>
                 </div>
-
                 <div className="mb-4">
                     <h4 className="font-semibold mb-2 text-sm">Forma de Pagamento (Cliente)</h4>
                     <div className="grid grid-cols-2 gap-2">
@@ -649,21 +565,10 @@ const PaymentModal: React.FC<{
                         <button onClick={() => setSelectedPaymentMethod(PaymentMethod.CREDIT_CARD_SIGHT)} className={`py-2 px-2 rounded-md text-sm font-medium transition-colors ${selectedPaymentMethod === PaymentMethod.CREDIT_CARD_SIGHT ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Crédito Vista</button>
                         <button onClick={() => setSelectedPaymentMethod(PaymentMethod.CREDIT_CARD_INSTALLMENT)} className={`py-2 px-2 rounded-md text-sm font-medium transition-colors col-span-2 ${selectedPaymentMethod === PaymentMethod.CREDIT_CARD_INSTALLMENT ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Crédito Parcelado</button>
                     </div>
-                    
                     {!goals.autoApplyDiscount && selectedPaymentMethod && selectedPaymentMethod !== PaymentMethod.CREDIT_CARD_INSTALLMENT && (
-                        <button 
-                            onClick={handleToggleManualDiscount}
-                            className={`w-full mt-3 py-2 text-sm font-medium rounded-md border transition-colors ${
-                                isManualDiscountActive 
-                                    ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                    : 'bg-gray-50 border-gray-300 text-gray-700 hover:bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300'
-                            }`}
-                        >
-                            {isManualDiscountActive ? 'Remover Desconto' : 'Aplicar Desconto (À Vista)'}
-                        </button>
+                        <button onClick={handleToggleManualDiscount} className={`w-full mt-3 py-2 text-sm font-medium rounded-md border transition-colors ${isManualDiscountActive ? 'bg-green-100 border-green-500 text-green-700 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-50 border-gray-300 text-gray-700 hover:bg-gray-100 dark:bg-gray-700 dark:border-gray-600 dark:text-gray-300'}`}>{isManualDiscountActive ? 'Remover Desconto' : 'Aplicar Desconto (À Vista)'}</button>
                     )}
                 </div>
-
                 {selectedPaymentMethod && (
                     <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-md mb-4">
                         {discountInfo.discountValue > 0 && (
@@ -678,7 +583,6 @@ const PaymentModal: React.FC<{
                         </div>
                     </div>
                 )}
-
                 <div className="flex justify-end space-x-4">
                     <button onClick={onClose} className="px-4 py-2 rounded-md text-gray-700 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 hover:bg-gray-300">Cancelar</button>
                     <button onClick={handleFinish} disabled={!selectedPaymentMethod} className="px-4 py-2 rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed">
@@ -705,6 +609,7 @@ const ConfirmationModal: React.FC<{ message: string; onConfirm: () => void; onCa
 
 
 const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, onAddServiceOrder, onUpdateServiceOrder, onDeleteServiceOrder, onToggleStatus, setActivePage, goals }) => {
+    // ... [Existing state variables] ...
     const { user, apiCall } = useContext(AuthContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
@@ -720,14 +625,12 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isCostModalOpen, setIsCostModalOpen] = useState(false);
     const [orderToComplete, setOrderToComplete] = useState<ServiceOrder | null>(null);
-    // Temp storage for revenue payment info before cost step
     const [tempPaymentInfo, setTempPaymentInfo] = useState<{paymentMethod: PaymentMethod, discount: number, finalPrice: number} | null>(null);
 
     const [generatedReceiptImage, setGeneratedReceiptImage] = useState<string | null>(null);
     const [isReceiptPromptOpen, setIsReceiptPromptOpen] = useState(false);
     const receiptRef = useRef<HTMLDivElement>(null);
 
-    // Fetch accounts when opening component
     useEffect(() => {
         const fetchAccounts = async () => {
             const data = await apiCall('financial', 'GET');
@@ -763,35 +666,32 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
         setDeletingOrderId(null);
     };
 
-    // --- Completion Flow ---
     const handleInitiateCompletion = (order: ServiceOrder) => {
         if (order.status === ServiceOrderStatus.PENDING) {
             setOrderToComplete(order);
             setIsPaymentModalOpen(true);
         } else {
-            // Revert to pending (if allowed)
             onToggleStatus(order.id);
         }
     };
 
-    // Step 1: Customer Payment Confirmed
+    // --- REVISED FLOW ---
     const handlePaymentComplete = async (paymentMethod: PaymentMethod, discount: number, finalPrice: number) => {
         setIsPaymentModalOpen(false);
         
         if (orderToComplete) {
-            const cost = orderToComplete.totalCost;
-            if (cost > 0) {
-                // Step 2: If cost > 0, open cost modal
+            // Check if Cost > 0
+            if (orderToComplete.totalCost > 0) {
+                // If yes, open Cost Modal
                 setTempPaymentInfo({ paymentMethod, discount, finalPrice });
                 setIsCostModalOpen(true);
             } else {
-                // No cost, finish directly
+                // If no, skip cost registration and finish
                 await finishOrder(orderToComplete.id, { paymentMethod, discount, finalPrice });
             }
         }
     };
 
-    // Step 2 (Optional): Cost Payment Confirmed
     const handleCostComplete = async (costDetails: any) => {
         setIsCostModalOpen(false);
         if (orderToComplete && tempPaymentInfo) {
@@ -811,104 +711,60 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
         }
     };
 
+    // ... [Receipt generation and rendering logic remains the same] ...
     const handleGenerateReceipt = async () => {
-        if (!window.html2canvas) {
-            alert('Biblioteca de imagem não carregada.');
-            return;
-        }
+        if (!window.html2canvas) { alert('Biblioteca de imagem não carregada.'); return; }
         if (receiptRef.current) {
             try {
-                // Allow time for DOM to update if needed
                 await new Promise(resolve => setTimeout(resolve, 100));
-                const canvas = await window.html2canvas(receiptRef.current, {
-                    scale: 2,
-                    backgroundColor: '#ffffff',
-                    logging: false,
-                    useCORS: true
-                });
+                const canvas = await window.html2canvas(receiptRef.current, { scale: 2, backgroundColor: '#ffffff', logging: false, useCORS: true });
                 setGeneratedReceiptImage(canvas.toDataURL('image/png'));
                 setIsReceiptPromptOpen(false);
-            } catch (error) {
-                console.error("Error generating receipt:", error);
-                alert('Erro ao gerar imagem.');
-            }
+            } catch (error) { console.error("Error generating receipt:", error); alert('Erro ao gerar imagem.'); }
         }
     };
 
-    // Helper to format filename (Strip tenant suffix)
     const getCleanFileName = (id: string) => {
         const parts = id.split('-');
-        if (parts.length >= 2) {
-            return `${parts.slice(0, 2).join('-')}.png`; // OS-YYYYMMnnnn
-        }
+        if (parts.length >= 2) return `${parts.slice(0, 2).join('-')}.png`;
         return `${id}.png`;
     };
 
     const filteredAndSortedOrders = useMemo(() => {
-        return serviceOrders
-            .filter(order => {
-                if (statusFilter !== 'All' && order.status !== statusFilter) {
-                    return false;
-                }
-                const lowerCaseSearch = searchTerm.toLowerCase();
-                if (lowerCaseSearch) {
-                    return (
-                        order.id.toLowerCase().includes(lowerCaseSearch) ||
-                        order.customerName.toLowerCase().includes(lowerCaseSearch) ||
-                        order.customerWhatsapp.includes(lowerCaseSearch) ||
-                        (order.customerContact && order.customerContact.includes(lowerCaseSearch))
-                    );
-                }
-                return true;
-            })
-            .sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+        return serviceOrders.filter(order => {
+            if (statusFilter !== 'All' && order.status !== statusFilter) return false;
+            const lowerCaseSearch = searchTerm.toLowerCase();
+            if (lowerCaseSearch) {
+                return (
+                    order.id.toLowerCase().includes(lowerCaseSearch) ||
+                    order.customerName.toLowerCase().includes(lowerCaseSearch) ||
+                    order.customerWhatsapp.includes(lowerCaseSearch) ||
+                    (order.customerContact && order.customerContact.includes(lowerCaseSearch))
+                );
+            }
+            return true;
+        }).sort((a,b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
     }, [serviceOrders, statusFilter, searchTerm]);
 
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [statusFilter, searchTerm]);
+    useEffect(() => { setCurrentPage(1); }, [statusFilter, searchTerm]);
 
     const indexOfLastRecord = currentPage * recordsPerPage;
     const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
     const currentRecords = filteredAndSortedOrders.slice(indexOfFirstRecord, indexOfLastRecord);
     const nPages = Math.ceil(filteredAndSortedOrders.length / recordsPerPage);
 
-    const nextPage = () => {
-        if (currentPage < nPages) setCurrentPage(currentPage + 1);
-    };
-    const prevPage = () => {
-        if (currentPage > 1) setCurrentPage(currentPage - 1);
-    };
+    const nextPage = () => { if (currentPage < nPages) setCurrentPage(currentPage + 1); };
+    const prevPage = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
 
     return (
          <div className="container mx-auto">
             {isModalOpen && <OSModal services={services} orderToEdit={editingOrder} onClose={() => { setIsModalOpen(false); setEditingOrder(null); }} onSave={handleSaveOrder} goals={goals} />}
             
-            {deletingOrderId && (
-                <ConfirmationModal
-                    message="Tem certeza que deseja excluir esta Ordem de Serviço? As transações financeiras associadas também serão removidas."
-                    onConfirm={handleDeleteConfirm}
-                    onCancel={() => setDeletingOrderId(null)}
-                />
-            )}
+            {deletingOrderId && <ConfirmationModal message="Tem certeza que deseja excluir esta Ordem de Serviço? As transações financeiras associadas também serão removidas." onConfirm={handleDeleteConfirm} onCancel={() => setDeletingOrderId(null)} />}
 
-            {isPaymentModalOpen && orderToComplete && (
-                <PaymentModal 
-                    order={orderToComplete}
-                    goals={goals}
-                    onClose={() => { setIsPaymentModalOpen(false); setOrderToComplete(null); }}
-                    onComplete={handlePaymentComplete}
-                />
-            )}
+            {isPaymentModalOpen && orderToComplete && <PaymentModal order={orderToComplete} goals={goals} onClose={() => { setIsPaymentModalOpen(false); setOrderToComplete(null); }} onComplete={handlePaymentComplete} />}
 
-            {isCostModalOpen && orderToComplete && (
-                <CostPaymentModal 
-                    order={orderToComplete}
-                    accounts={accounts}
-                    onClose={() => { setIsCostModalOpen(false); setOrderToComplete(null); setTempPaymentInfo(null); }}
-                    onConfirm={handleCostComplete}
-                />
-            )}
+            {isCostModalOpen && orderToComplete && <CostPaymentModal order={orderToComplete} accounts={accounts} onClose={() => { setIsCostModalOpen(false); setOrderToComplete(null); setTempPaymentInfo(null); }} onConfirm={handleCostComplete} />}
 
             {isReceiptPromptOpen && (
                 <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[140]">
@@ -923,19 +779,12 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
                 </div>
             )}
 
-            {generatedReceiptImage && orderToComplete && (
-                <ReceiptModal 
-                    imageData={generatedReceiptImage} 
-                    fileName={getCleanFileName(orderToComplete.id)}
-                    onClose={() => { setGeneratedReceiptImage(null); setOrderToComplete(null); }} 
-                />
-            )}
+            {generatedReceiptImage && orderToComplete && <ReceiptModal imageData={generatedReceiptImage} fileName={getCleanFileName(orderToComplete.id)} onClose={() => { setGeneratedReceiptImage(null); setOrderToComplete(null); }} />}
 
-            {/* HIDDEN OS RECEIPT TEMPLATE */}
+            {/* HIDDEN OS RECEIPT TEMPLATE - SAME AS BEFORE */}
             <div style={{ position: 'absolute', left: '-9999px', top: 0 }}>
                 {orderToComplete && (
                     <div ref={receiptRef} className="bg-white text-black p-4 w-[380px] font-mono text-xs leading-normal">
-                        {/* Header */}
                         <div className="flex flex-col items-center justify-center mb-4 border-b border-black pb-4 border-dashed">
                             <div className="flex flex-row items-center justify-center gap-2">
                                 <svg className="mt-1" width="26" height="26 " fill="#000000" viewBox="0 0 18 18">
@@ -948,7 +797,6 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
                             </div>
                             <p className="text-[10px] uppercase mt-1">Comprovante de Serviço</p>
                         </div>
-
                         <div className="mb-4 space-y-1">
                             <div className="flex justify-between"><span>DATA:</span> <span>{new Date().toLocaleDateString('pt-BR')} {new Date().toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}</span></div>
                             <div className="flex justify-between"><span>CLIENTE:</span> <span className="font-bold">{orderToComplete.customerName}</span></div>
@@ -956,16 +804,12 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
                             <div className="flex justify-between"><span>VENDEDOR:</span> <span>{user?.name}</span></div>
                             <div className="flex justify-between mt-1"><span>Nº OS:</span> <span className="font-bold">{orderToComplete.id.split('-').slice(0,2).join('-')}</span></div>
                         </div>
-
                         <div className="border-b border-black border-dashed mb-2"></div>
-                        
                         <div className="space-y-2 mb-4">
                             <div className="font-bold mb-1">SERVIÇO REALIZADO</div>
                             <div>{orderToComplete.serviceDescription}</div>
                         </div>
-
                         <div className="border-b border-black border-dashed mb-2"></div>
-
                         <div className="space-y-1 text-right font-bold text-sm">
                             <div className="flex justify-between"><span>VALOR TOTAL:</span> <span>R$ {formatCurrencyNumber(orderToComplete.totalPrice)}</span></div>
                             {orderToComplete.discount && orderToComplete.discount > 0 && (
@@ -973,56 +817,37 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
                             )}
                             <div className="flex justify-between text-base mt-2"><span>PAGO:</span> <span>R$ {formatCurrencyNumber(orderToComplete.finalPrice || orderToComplete.totalPrice)}</span></div>
                         </div>
-                        
-                        <div className="mt-2 text-center text-[10px]">
-                            Forma de Pagamento: {orderToComplete.paymentMethod}
-                        </div>
-
+                        <div className="mt-2 text-center text-[10px]">Forma de Pagamento: {orderToComplete.paymentMethod}</div>
                         {goals.companyInfo?.name && (
                             <div className="mt-4 pt-2 text-center space-y-1">
                                 <div className="border-t border-black border-dashed mb-2"></div>
-                                <p className="font-bold uppercase">
-                                    {goals.companyInfo.name}
-                                </p>
-                                {(goals.companyInfo.phone || goals.companyInfo.email) && (
-                                    <p>
-                                        {goals.companyInfo.phone ? `${goals.companyInfo.phone}` : ''}
-                                    </p>
-                                )}
+                                <p className="font-bold uppercase">{goals.companyInfo.name}</p>
+                                {(goals.companyInfo.phone || goals.companyInfo.email) && (<p>{goals.companyInfo.phone ? `${goals.companyInfo.phone}` : ''}</p>)}
                             </div>
                         )}
-                        
-                        {/* Garantia: inserir em configurações globais */}
                     </div>
                 )}
             </div>
-
 
             <div className="flex justify-between items-center mb-6 flex-wrap gap-4">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Ordens de Serviço</h1>
                 <button onClick={handleOpenCreateModal} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Criar Nova OS</button>
             </div>
 
+            {/* Search and Filters */}
             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg mb-6 space-y-4">
                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <input
-                        type="text"
-                        placeholder="Buscar por OS, Nome ou Telefone..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
-                    />
+                    <input type="text" placeholder="Buscar por OS, Nome ou Telefone..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2" />
                      <div className="flex items-center justify-center md:justify-end space-x-2">
                         <span className="text-sm font-medium">Status:</span>
                         {(['All', ...Object.values(ServiceOrderStatus)]).map(status => (
-                            <button key={status} onClick={() => setStatusFilter(status as ServiceOrderStatus | 'All')} className={`px-3 py-1 text-sm rounded-full ${statusFilter === status ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>
-                                {status === 'All' ? 'Todas' : status}
-                            </button>
+                            <button key={status} onClick={() => setStatusFilter(status as ServiceOrderStatus | 'All')} className={`px-3 py-1 text-sm rounded-full ${statusFilter === status ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>{status === 'All' ? 'Todas' : status}</button>
                         ))}
                     </div>
                 </div>
             </div>
 
+            {/* Table */}
             <div className="bg-white dark:bg-gray-800 shadow-lg rounded-xl overflow-hidden">
                  <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
@@ -1039,9 +864,7 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
                         </thead>
                         <tbody>
                              {currentRecords.length === 0 ? (
-                                <tr>
-                                    <td colSpan={7} className="text-center py-8 text-gray-500">Nenhuma Ordem de Serviço encontrada.</td>
-                                </tr>
+                                <tr><td colSpan={7} className="text-center py-8 text-gray-500">Nenhuma Ordem de Serviço encontrada.</td></tr>
                              ) : (
                                 currentRecords.map(order => {
                                     const isTechnician = user?.role === 'technician';
@@ -1049,10 +872,7 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
                                     const canEdit = !isTechnician || isPending;
                                     const canDelete = !isTechnician || isPending;
                                     const canReopen = !isTechnician;
-                                    
-                                    const displayPrice = order.status === ServiceOrderStatus.COMPLETED && order.finalPrice 
-                                        ? order.finalPrice 
-                                        : order.totalPrice;
+                                    const displayPrice = order.status === ServiceOrderStatus.COMPLETED && order.finalPrice ? order.finalPrice : order.totalPrice;
 
                                     return (
                                         <tr key={order.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
@@ -1067,36 +887,12 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
                                             <td className="px-6 py-4"><OSStatusBadge status={order.status} /></td>
                                             <td className="px-6 py-4 space-x-4 whitespace-nowrap">
                                                 {isPending ? (
-                                                    <button 
-                                                        onClick={() => handleInitiateCompletion(order)}
-                                                        className="font-medium text-green-600 dark:text-green-500 hover:underline"
-                                                    >
-                                                        Concluir
-                                                    </button>
+                                                    <button onClick={() => handleInitiateCompletion(order)} className="font-medium text-green-600 dark:text-green-500 hover:underline">Concluir</button>
                                                 ) : (
-                                                    canReopen && (
-                                                        <button 
-                                                            onClick={() => onToggleStatus(order.id)}
-                                                            className="font-medium text-yellow-500 dark:text-yellow-400 hover:underline"
-                                                        >
-                                                            Pendente
-                                                        </button>
-                                                    )
+                                                    canReopen && (<button onClick={() => onToggleStatus(order.id)} className="font-medium text-yellow-500 dark:text-yellow-400 hover:underline">Pendente</button>)
                                                 )}
-                                                <button 
-                                                    onClick={() => handleOpenEditModal(order)} 
-                                                    disabled={!canEdit}
-                                                    className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline disabled:text-gray-400 disabled:cursor-not-allowed disabled:no-underline"
-                                                >
-                                                    Editar
-                                                </button>
-                                                <button 
-                                                    onClick={() => setDeletingOrderId(order.id)} 
-                                                    disabled={!canDelete}
-                                                    className="font-medium text-red-600 dark:text-red-500 hover:underline disabled:text-gray-400 disabled:cursor-not-allowed disabled:no-underline"
-                                                >
-                                                    Excluir
-                                                </button>
+                                                <button onClick={() => handleOpenEditModal(order)} disabled={!canEdit} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline disabled:text-gray-400 disabled:cursor-not-allowed disabled:no-underline">Editar</button>
+                                                <button onClick={() => setDeletingOrderId(order.id)} disabled={!canDelete} className="font-medium text-red-600 dark:text-red-500 hover:underline disabled:text-gray-400 disabled:cursor-not-allowed disabled:no-underline">Excluir</button>
                                             </td>
                                         </tr>
                                     )
@@ -1106,24 +902,10 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
                 </div>
                  {nPages > 1 && (
                     <div className="p-4 flex justify-between items-center flex-wrap gap-2">
-                         <span className="text-sm text-gray-700 dark:text-gray-400">
-                            Página {currentPage} de {nPages} ({filteredAndSortedOrders.length} registros)
-                        </span>
+                         <span className="text-sm text-gray-700 dark:text-gray-400">Página {currentPage} de {nPages} ({filteredAndSortedOrders.length} registros)</span>
                         <div className="flex space-x-2">
-                            <button
-                                onClick={prevPage}
-                                disabled={currentPage === 1}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-                            >
-                                Anterior
-                            </button>
-                            <button
-                                onClick={nextPage}
-                                disabled={currentPage === nPages || nPages === 0}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-                            >
-                                Próximo
-                            </button>
+                            <button onClick={prevPage} disabled={currentPage === 1} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">Anterior</button>
+                            <button onClick={nextPage} disabled={currentPage === nPages || nPages === 0} className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700">Próximo</button>
                         </div>
                     </div>
                 )}
