@@ -121,6 +121,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                 type: 'error',
                 message: 'Data de pagamento não pode ser futura. Para agendamentos, utilize o status "Pendente" com a data de vencimento desejada.'
             });
+            // Don't update state if invalid
             return;
         }
         setPaymentDate(newDate);
@@ -235,7 +236,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             amount: numericAmount,
             type: TransactionType.EXPENSE,
             category,
-            // Even if User selects PAID, Credit Card items are managed via Invoice, so Status reflects intention but Backend handles Table Routing
+            // Pass the intended status. If it's Credit Card, the backend will divert it to the CC table.
             status: status, 
             timestamp: createDateAsUTC(purchaseDate), // Competence
             financialAccountId: selectedAccountId || undefined,
@@ -248,6 +249,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
         if (isCreditCard) {
             // Backend handles due date calculation based on billing cycle. 
             // Payment date is irrelevant for the individual CC item in Cash Flow (it goes to CC Table)
+            // But we send null/undefined to clear them if converting from Cash
             transactionPayload.dueDate = null; 
             transactionPayload.paymentDate = null;
         } else {
