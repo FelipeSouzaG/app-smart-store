@@ -101,23 +101,25 @@ const CostPaymentModal: React.FC<{
     const isCreditCard = !isCashBox && selectedMethod?.type === 'Credit';
 
     const handleConfirm = () => {
-        if (status === TransactionStatus.PAID && !isCashBox && !selectedMethodId) {
-            alert("Selecione um método de pagamento.");
-            return;
-        }
-        if (!date) {
-            alert("Selecione uma data.");
-            return;
-        }
+    if (status === TransactionStatus.PAID && !isCashBox && !selectedMethodId) {
+        alert("Selecione um método de pagamento.");
+        return;
+    }
+    if (!date) {
+        alert("Selecione uma data.");
+        return;
+    }
 
-        onConfirm({
-            status,
-            financialAccountId: selectedAccountId,
-            paymentMethodId: selectedMethodId,
-            date,
-            installments: isCreditCard ? installments : 1
-        });
-    };
+    onConfirm({
+        status,
+        financialAccountId: selectedAccountId,
+        paymentMethodId: selectedMethodId,
+        date,
+        installments: isCreditCard ? installments : 1,
+        // NEW: sinaliza ao backend que essa saída é cartão de crédito
+        isCreditCard: Boolean(isCreditCard)
+    });
+};
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
