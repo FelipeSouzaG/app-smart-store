@@ -101,7 +101,7 @@ const CreditCardStatementModal: React.FC<{
 const Finance: React.FC = () => {
     const { apiCall } = useContext(AuthContext);
     const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
-    const [transactions, setTransactions] = useState<CashTransaction[]>([]);
+    const [creditTransactions, setCreditTransactions] = useState<any[]>([]); // New State for CC items
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
@@ -120,8 +120,9 @@ const Finance: React.FC = () => {
             const accs = await apiCall('financial', 'GET');
             if (accs) setAccounts(accs);
             
-            const trans = await apiCall('transactions', 'GET');
-            if (trans) setTransactions(trans);
+            // Fetch ALL Credit Card Transactions for the "Financeiro" view
+            const ccTrans = await apiCall('financial/statement', 'GET');
+            if (ccTrans) setCreditTransactions(ccTrans);
         };
         loadData();
     }, []);
@@ -217,27 +218,12 @@ const Finance: React.FC = () => {
         setPaymentMethods(paymentMethods.filter((_, i) => i !== index));
     };
 
-    // --- Unified Financial Table Logic ---
-    const paidTransactions = useMemo(() => {
-        return transactions
-            .filter(t => t.status === TransactionStatus.PAID)
-            .sort((a, b) => {
-                const dateA = a.paymentDate ? new Date(a.paymentDate).getTime() : 0;
-                const dateB = b.paymentDate ? new Date(b.paymentDate).getTime() : 0;
-                return dateB - dateA; // Descending
-            });
-    }, [transactions]);
-
-    const getPaymentMethodName = (t: CashTransaction) => {
-        if (t.financialAccountId === 'cash-box') return 'Dinheiro / Caixa';
-        
+    // Helper to resolve card names
+    const getCardName = (t: any) => {
         const account = accounts.find(a => a.id === t.financialAccountId);
         if (!account) return 'Banco Desconhecido';
-
-        const method = account.paymentMethods.find(m => m.id === t.paymentMethodId);
-        if (!method) return `${account.bankName} (Manual)`;
-
-        return `${account.bankName} - ${method.name}`;
+        const method = account.paymentMethods.find(m => (m.id || (m as any)._id) === t.paymentMethodId);
+        return `${account.bankName} - ${method ? method.name : 'Cartão'}`;
     };
 
     return (
@@ -322,41 +308,51 @@ const Finance: React.FC = () => {
                 </div>
             </div>
 
-            {/* UNIFIED FINANCIAL TABLE */}
+            {/* UNIFIED CREDIT CARD EXPENSES TABLE */}
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="p-6 border-b dark:border-gray-700 bg-gray-50 dark:bg-gray-700">
-                    <h2 className="text-xl font-bold text-gray-900 dark:text-white">Movimentações Financeiras Realizadas (Pagos)</h2>
-                    <p className="text-sm text-gray-500">Histórico unificado de todas as entradas e saídas efetivadas.</p>
+                <div className="p-6 border-b dark:border-gray-700 bg-indigo-50 dark:bg-indigo-900/10">
+                    <h2 className="text-xl font-bold text-indigo-900 dark:text-indigo-100">Histórico de Compras no Crédito</h2>
+                    <p className="text-sm text-indigo-600 dark:text-indigo-300">
+                        Registro detalhado de todas as compras parceladas e à vista nos cartões de crédito da empresa.
+                    </p>
                 </div>
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                         <thead className="text-xs text-gray-700 uppercase bg-gray-100 dark:bg-gray-700 dark:text-gray-400">
                             <tr>
-                                <th className="px-6 py-3">Data Pagto</th>
+                                <th className="px-6 py-3">Data Compra</th>
                                 <th className="px-6 py-3">Descrição</th>
                                 <th className="px-6 py-3">Categoria</th>
-                                <th className="px-6 py-3">Forma de Pagamento</th>
-                                <th className="px-6 py-3 text-right">Valor</th>
+                                <th className="px-6 py-3">Cartão / Banco</th>
+                                <th className="px-6 py-3">Venc. Fatura</th>
+                                <th className="px-6 py-3">Parc.</th>
+                                <th className="px-6 py-3 text-right">Valor Parcela</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {paidTransactions.length === 0 ? (
+                            {creditTransactions.length === 0 ? (
                                 <tr>
-                                    <td colSpan={5} className="px-6 py-8 text-center text-gray-500">Nenhuma movimentação realizada encontrada.</td>
+                                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">Nenhuma compra no cartão de crédito encontrada.</td>
                                 </tr>
                             ) : (
-                                paidTransactions.map(t => (
+                                creditTransactions.map(t => (
                                     <tr key={t.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                        <td className="px-6 py-4">{formatDateUTC(t.paymentDate)}</td>
+                                        <td className="px-6 py-4">{formatDateUTC(t.timestamp)}</td>
                                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{t.description}</td>
                                         <td className="px-6 py-4">{t.category}</td>
                                         <td className="px-6 py-4">
-                                            <span className="px-2 py-1 rounded bg-gray-200 dark:bg-gray-600 text-gray-700 dark:text-gray-300 text-xs">
-                                                {getPaymentMethodName(t)}
+                                            <span className="px-2 py-1 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold">
+                                                {getCardName(t)}
                                             </span>
                                         </td>
-                                        <td className={`px-6 py-4 text-right font-bold ${t.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                                            {t.type === 'expense' ? '-' : '+'} R$ {formatCurrencyNumber(t.amount)}
+                                        <td className="px-6 py-4 font-bold text-gray-700 dark:text-gray-300">
+                                            {formatDateUTC(t.dueDate)}
+                                        </td>
+                                        <td className="px-6 py-4 text-xs">
+                                            {t.installmentNumber}/{t.totalInstallments}
+                                        </td>
+                                        <td className="px-6 py-4 text-right font-bold text-red-500">
+                                            R$ {formatCurrencyNumber(t.amount)}
                                         </td>
                                     </tr>
                                 ))
