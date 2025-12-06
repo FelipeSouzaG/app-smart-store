@@ -31,6 +31,41 @@ const OSStatusBadge: React.FC<{ status: ServiceOrderStatus }> = ({ status }) => 
     return <span className={`${baseClasses} ${statusClasses[status]}`}>{status}</span>;
 };
 
+// Internal Notification Modal
+const NotificationModal: React.FC<{ isOpen: boolean; type: 'success' | 'error'; message: string; onClose: () => void }> = ({ isOpen, type, message, onClose }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl p-6 max-w-sm w-full transform transition-all scale-100">
+                <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4 ${type === 'success' ? 'bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400'}`}>
+                    {type === 'success' ? (
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                    ) : (
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    )}
+                </div>
+                <h3 className={`text-lg leading-6 font-bold text-center mb-2 ${type === 'success' ? 'text-gray-900 dark:text-white' : 'text-gray-900 dark:text-white'}`}>
+                    {type === 'success' ? 'Sucesso!' : 'Atenção'}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-300 text-center mb-6">
+                    {message}
+                </p>
+                <button
+                    onClick={onClose}
+                    className={`w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 sm:text-sm transition-colors ${type === 'success' ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500' : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'}`}
+                >
+                    Entendi
+                </button>
+            </div>
+        </div>
+    );
+};
+
 // Receipt Modal - Download Only logic
 const ReceiptModal: React.FC<{ imageData: string; fileName: string; onClose: () => void }> = ({ imageData, fileName, onClose }) => {
     const [downloadSuccess, setDownloadSuccess] = useState(false);
@@ -94,6 +129,11 @@ const CostPaymentModal: React.FC<{
     const [selectedAccountId, setSelectedAccountId] = useState('cash-box');
     const [selectedMethodId, setSelectedMethodId] = useState('');
     const [installments, setInstallments] = useState(1);
+    
+    // Notification State
+    const [notification, setNotification] = useState<{isOpen: boolean; type: 'success' | 'error'; message: string}>({
+        isOpen: false, type: 'error', message: ''
+    });
 
     // Data de hoje para validação
     const today = new Date().toISOString().split('T')[0];
@@ -108,16 +148,16 @@ const CostPaymentModal: React.FC<{
     const handleConfirm = () => {
         if (status === TransactionStatus.PAID) {
             if (!isCashBox && !selectedMethodId) {
-                alert("Selecione um método de pagamento.");
+                setNotification({ isOpen: true, type: 'error', message: "Selecione um método de pagamento." });
                 return;
             }
             if (!date) {
-                alert("Selecione uma data.");
+                setNotification({ isOpen: true, type: 'error', message: "Selecione uma data." });
                 return;
             }
             // Bloqueio de data futura para pagamentos realizados (exceto cartão de crédito que vira fatura)
             if (!isCreditCard && date > today) {
-                alert("A data do pagamento não pode ser futura.");
+                setNotification({ isOpen: true, type: 'error', message: "A data do pagamento não pode ser futura." });
                 return;
             }
         }
@@ -135,6 +175,13 @@ const CostPaymentModal: React.FC<{
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
+            <NotificationModal 
+                isOpen={notification.isOpen} 
+                type={notification.type} 
+                message={notification.message} 
+                onClose={() => setNotification({ ...notification, isOpen: false })} 
+            />
+
             <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md animate-fade-in">
                 <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">Pagamento do Custo do Serviço</h3>
                 <p className="text-sm text-gray-500 mb-4">
