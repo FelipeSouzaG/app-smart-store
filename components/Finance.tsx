@@ -1,8 +1,7 @@
 
-import React, { useState, useEffect, useContext, useMemo } from 'react';
+import React, { useState, useEffect, useContext } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
-import { FinancialAccount, ReceivingRule, PaymentMethodConfig, CashTransaction, TransactionStatus } from '../types';
-import { formatCurrencyNumber } from '../validation';
+import { FinancialAccount, ReceivingRule, PaymentMethodConfig } from '../types';
 
 const methodTypes = {
     'Pix': 'Pix',
@@ -11,104 +10,13 @@ const methodTypes = {
     'Boleto': 'Boleto'
 };
 
-const formatDateUTC = (dateString: Date | string | undefined) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
-};
-
-// Nova Tabela Específica para o Cartão de Crédito
-const CreditCardStatementModal: React.FC<{ 
-    account: FinancialAccount, 
-    method: PaymentMethodConfig, 
-    onClose: () => void 
-}> = ({ account, method, onClose }) => {
-    const { apiCall } = useContext(AuthContext);
-    const [cardTransactions, setCardTransactions] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
-
-    useEffect(() => {
-        const fetchItems = async () => {
-            const data = await apiCall(`financial/statement?accountId=${account.id}&methodId=${method.id}`, 'GET');
-            if (data) {
-                setCardTransactions(data);
-            }
-            setLoading(false);
-        };
-        fetchItems();
-    }, [account, method]);
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[70] p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto flex flex-col">
-                <div className="p-6 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
-                    <div>
-                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                            Extrato: {method.name}
-                        </h2>
-                        <p className="text-sm text-gray-500">{account.bankName} - Cartão de Crédito</p>
-                    </div>
-                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:hover:text-white text-2xl">&times;</button>
-                </div>
-
-                <div className="p-6 overflow-x-auto">
-                    {loading ? (
-                        <p className="text-center text-gray-500 py-8">Carregando extrato...</p>
-                    ) : cardTransactions.length === 0 ? (
-                        <p className="text-center text-gray-500 py-8">Nenhum custo lançado neste cartão ainda.</p>
-                    ) : (
-                        <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                            <thead className="text-xs text-gray-700 uppercase bg-gray-100 dark:bg-gray-700 dark:text-gray-400">
-                                <tr>
-                                    <th className="px-4 py-3">Descrição</th>
-                                    <th className="px-4 py-3">Categoria</th>
-                                    <th className="px-4 py-3">Valor</th>
-                                    <th className="px-4 py-3">Data Compra</th>
-                                    <th className="px-4 py-3">Vencimento Fatura</th>
-                                    <th className="px-4 py-3">Parcela</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {cardTransactions.map(item => (
-                                    <tr key={item.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
-                                            {item.description}
-                                        </td>
-                                        <td className="px-4 py-3">{item.category}</td>
-                                        <td className="px-4 py-3 font-semibold text-red-500">
-                                            R$ {formatCurrencyNumber(item.amount)}
-                                        </td>
-                                        <td className="px-4 py-3">{formatDateUTC(item.timestamp)}</td>
-                                        <td className="px-4 py-3 font-bold text-gray-700 dark:text-gray-300">
-                                            {formatDateUTC(item.dueDate)}
-                                        </td>
-                                        <td className="px-4 py-3 text-xs">
-                                            {item.installmentNumber} / {item.totalInstallments}
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    )}
-                </div>
-                <div className="p-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-right">
-                    <button onClick={onClose} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg">Fechar Tabela</button>
-                </div>
-            </div>
-        </div>
-    );
-};
-
 const Finance: React.FC = () => {
     const { apiCall } = useContext(AuthContext);
     const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
-    const [creditTransactions, setCreditTransactions] = useState<any[]>([]); // New State for CC items
     
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingAccount, setEditingAccount] = useState<FinancialAccount | null>(null);
     const [loading, setLoading] = useState(false);
-
-    // Invoice View State
-    const [statementViewer, setStatementViewer] = useState<{ account: FinancialAccount, method: PaymentMethodConfig } | null>(null);
 
     // Form State
     const [bankName, setBankName] = useState('');
@@ -116,15 +24,7 @@ const Finance: React.FC = () => {
     const [paymentMethods, setPaymentMethods] = useState<PaymentMethodConfig[]>([]);
 
     useEffect(() => {
-        const loadData = async () => {
-            const accs = await apiCall('financial', 'GET');
-            if (accs) setAccounts(accs);
-            
-            // Fetch ALL Credit Card Transactions for the "Financeiro" view
-            const ccTrans = await apiCall('financial/statement', 'GET');
-            if (ccTrans) setCreditTransactions(ccTrans);
-        };
-        loadData();
+        fetchAccounts();
     }, []);
 
     const fetchAccounts = async () => {
@@ -151,7 +51,6 @@ const Finance: React.FC = () => {
         if (!bankName) return alert('Nome do banco é obrigatório');
         
         setLoading(true);
-        // Clean data before sending (remove temporary IDs if needed, handle numbers)
         const payload = { 
             bankName, 
             receivingRules: receivingRules.map(r => ({
@@ -180,7 +79,7 @@ const Finance: React.FC = () => {
     };
 
     const handleDelete = async (id: string) => {
-        if (!window.confirm('Tem certeza? Isso pode afetar transações existentes.')) return;
+        if (!window.confirm('Tem certeza? Isso pode afetar relatórios financeiros.')) return;
         await apiCall(`financial/${id}`, 'DELETE');
         fetchAccounts();
     };
@@ -192,7 +91,6 @@ const Finance: React.FC = () => {
     
     const updateReceivingRule = (index: number, field: keyof ReceivingRule, value: any) => {
         const updated = [...receivingRules];
-        // Safe number parsing
         const safeValue = typeof value === 'number' && isNaN(value) ? 0 : value;
         updated[index] = { ...updated[index], [field]: safeValue };
         setReceivingRules(updated);
@@ -208,7 +106,6 @@ const Finance: React.FC = () => {
 
     const updatePaymentMethod = (index: number, field: keyof PaymentMethodConfig, value: any) => {
         const updated = [...paymentMethods];
-        // Safe number parsing
         const safeValue = typeof value === 'number' && isNaN(value) ? 0 : value;
         updated[index] = { ...updated[index], [field]: safeValue };
         setPaymentMethods(updated);
@@ -218,148 +115,67 @@ const Finance: React.FC = () => {
         setPaymentMethods(paymentMethods.filter((_, i) => i !== index));
     };
 
-    // Helper to resolve card names
-    const getCardName = (t: any) => {
-        const account = accounts.find(a => a.id === t.financialAccountId);
-        if (!account) return 'Banco Desconhecido';
-        const method = account.paymentMethods.find(m => (m.id || (m as any)._id) === t.paymentMethodId);
-        return `${account.bankName} - ${method ? method.name : 'Cartão'}`;
-    };
-
     return (
         <div className="container mx-auto p-4 space-y-8">
-            {statementViewer && (
-                <CreditCardStatementModal 
-                    account={statementViewer.account} 
-                    method={statementViewer.method} 
-                    onClose={() => setStatementViewer(null)} 
-                />
-            )}
-
-            {/* HEADER & BANKS */}
-            <div>
-                <div className="flex justify-between items-center mb-6">
-                    <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Financeiro</h1>
-                    <button 
-                        onClick={() => handleOpenModal()} 
-                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md"
-                    >
-                        Inserir Banco
-                    </button>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                    {accounts.map(acc => (
-                        <div key={acc.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
-                            <div className="p-4 bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600 flex justify-between items-center">
-                                <h3 className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{acc.bankName}</h3>
-                                <div className="flex gap-2">
-                                    <button onClick={() => handleOpenModal(acc)} className="text-gray-500 hover:text-indigo-500" title="Editar">
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
-                                    </button>
-                                    <button onClick={() => handleDelete(acc.id)} className="text-gray-500 hover:text-red-500" title="Excluir">
-                                        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
-                                    </button>
-                                </div>
-                            </div>
-                            
-                            <div className="p-4 space-y-4 flex-1">
-                                {/* Recebimentos Preview */}
-                                <div>
-                                    <h4 className="text-xs font-bold uppercase text-gray-400 mb-2">Recebimentos (Vendas)</h4>
-                                    {acc.receivingRules.length === 0 ? <p className="text-xs text-gray-500 italic">Nenhum configurado</p> : (
-                                        <div className="flex flex-wrap gap-2">
-                                            {acc.receivingRules.map((rule, i) => (
-                                                <span key={i} className="text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300 px-2 py-1 rounded-full">
-                                                    {methodTypes[rule.type]} {rule.type === 'Credit' ? `${rule.installmentsMin}-${rule.installmentsMax}x` : ''} ({rule.taxRate}%)
-                                                </span>
-                                            ))}
-                                        </div>
-                                    )}
-                                </div>
-
-                                {/* Pagamentos Preview */}
-                                <div>
-                                    <h4 className="text-xs font-bold uppercase text-gray-400 mb-2">Pagamentos (Custos)</h4>
-                                    {acc.paymentMethods.length === 0 ? <p className="text-xs text-gray-500 italic">Nenhum configurado</p> : (
-                                        <ul className="space-y-2">
-                                            {acc.paymentMethods.map((pm, i) => (
-                                                <li key={i} className="flex justify-between items-center text-sm p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                                                    <div className="flex items-center gap-2">
-                                                        <span className="text-gray-700 dark:text-gray-300 font-medium">{pm.name}</span>
-                                                        <span className="text-[10px] text-gray-500 bg-gray-200 dark:bg-gray-600 px-1.5 rounded">{methodTypes[pm.type]}</span>
-                                                    </div>
-                                                    {pm.type === 'Credit' && (
-                                                        <button 
-                                                            onClick={() => setStatementViewer({ account: acc, method: pm })}
-                                                            className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200 transition-colors"
-                                                        >
-                                                            Extrato
-                                                        </button>
-                                                    )}
-                                                </li>
-                                            ))}
-                                        </ul>
-                                    )}
-                                </div>
-                            </div>
-                        </div>
-                    ))}
-                </div>
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerenciar Contas Bancárias</h1>
+                <button 
+                    onClick={() => handleOpenModal()} 
+                    className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md"
+                >
+                    + Nova Conta
+                </button>
             </div>
 
-            {/* UNIFIED CREDIT CARD EXPENSES TABLE */}
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
-                <div className="p-6 border-b dark:border-gray-700 bg-indigo-50 dark:bg-indigo-900/10">
-                    <h2 className="text-xl font-bold text-indigo-900 dark:text-indigo-100">Histórico de Compras no Crédito</h2>
-                    <p className="text-sm text-indigo-600 dark:text-indigo-300">
-                        Registro detalhado de todas as compras parceladas e à vista nos cartões de crédito da empresa.
-                    </p>
-                </div>
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                        <thead className="text-xs text-gray-700 uppercase bg-gray-100 dark:bg-gray-700 dark:text-gray-400">
-                            <tr>
-                                <th className="px-6 py-3">Data Compra</th>
-                                <th className="px-6 py-3">Descrição</th>
-                                <th className="px-6 py-3">Categoria</th>
-                                <th className="px-6 py-3">Cartão / Banco</th>
-                                <th className="px-6 py-3">Venc. Fatura</th>
-                                <th className="px-6 py-3">Parc.</th>
-                                <th className="px-6 py-3 text-right">Valor Parcela</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {creditTransactions.length === 0 ? (
-                                <tr>
-                                    <td colSpan={7} className="px-6 py-8 text-center text-gray-500">Nenhuma compra no cartão de crédito encontrada.</td>
-                                </tr>
-                            ) : (
-                                creditTransactions.map(t => (
-                                    <tr key={t.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                        <td className="px-6 py-4">{formatDateUTC(t.timestamp)}</td>
-                                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{t.description}</td>
-                                        <td className="px-6 py-4">{t.category}</td>
-                                        <td className="px-6 py-4">
-                                            <span className="px-2 py-1 rounded bg-indigo-100 dark:bg-indigo-900 text-indigo-700 dark:text-indigo-300 text-xs font-bold">
-                                                {getCardName(t)}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+                {accounts.map(acc => (
+                    <div key={acc.id} className="bg-white dark:bg-gray-800 rounded-xl shadow-lg border border-gray-200 dark:border-gray-700 overflow-hidden flex flex-col">
+                        <div className="p-4 bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600 flex justify-between items-center">
+                            <h3 className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{acc.bankName}</h3>
+                            <div className="flex gap-2">
+                                <button onClick={() => handleOpenModal(acc)} className="text-gray-500 hover:text-indigo-500" title="Editar">
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                                </button>
+                                <button onClick={() => handleDelete(acc.id)} className="text-gray-500 hover:text-red-500" title="Excluir">
+                                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                                </button>
+                            </div>
+                        </div>
+                        
+                        <div className="p-4 space-y-4 flex-1">
+                            {/* Recebimentos Preview */}
+                            <div>
+                                <h4 className="text-xs font-bold uppercase text-gray-400 mb-2">Recebimentos (Vendas)</h4>
+                                {acc.receivingRules.length === 0 ? <p className="text-xs text-gray-500 italic">Nenhum configurado</p> : (
+                                    <div className="flex flex-wrap gap-2">
+                                        {acc.receivingRules.map((rule, i) => (
+                                            <span key={i} className="text-xs bg-green-100 dark:bg-green-900 text-green-800 dark:text-green-300 px-2 py-1 rounded-full">
+                                                {methodTypes[rule.type]} {rule.type === 'Credit' ? `${rule.installmentsMin}-${rule.installmentsMax}x` : ''} ({rule.taxRate}%)
                                             </span>
-                                        </td>
-                                        <td className="px-6 py-4 font-bold text-gray-700 dark:text-gray-300">
-                                            {formatDateUTC(t.dueDate)}
-                                        </td>
-                                        <td className="px-6 py-4 text-xs">
-                                            {t.installmentNumber}/{t.totalInstallments}
-                                        </td>
-                                        <td className="px-6 py-4 text-right font-bold text-red-500">
-                                            R$ {formatCurrencyNumber(t.amount)}
-                                        </td>
-                                    </tr>
-                                ))
-                            )}
-                        </tbody>
-                    </table>
-                </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* Pagamentos Preview */}
+                            <div>
+                                <h4 className="text-xs font-bold uppercase text-gray-400 mb-2">Formas de Pagamento (Custos)</h4>
+                                {acc.paymentMethods.length === 0 ? <p className="text-xs text-gray-500 italic">Nenhum configurado</p> : (
+                                    <ul className="space-y-2">
+                                        {acc.paymentMethods.map((pm, i) => (
+                                            <li key={i} className="flex justify-between items-center text-sm p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-gray-700 dark:text-gray-300 font-medium">{pm.name}</span>
+                                                    <span className="text-[10px] text-gray-500 bg-gray-200 dark:bg-gray-600 px-1.5 rounded">{methodTypes[pm.type]}</span>
+                                                </div>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                ))}
             </div>
 
             {/* Modal for Bank Editing */}
@@ -436,7 +252,7 @@ const Finance: React.FC = () => {
                                 {/* SECTION: PAGAMENTOS */}
                                 <div className="space-y-4">
                                     <div className="flex justify-between items-center">
-                                        <h3 className="text-lg font-bold text-red-500 dark:text-red-400">Pagamentos (Custos)</h3>
+                                        <h3 className="text-lg font-bold text-red-500 dark:text-red-400">Formas de Pagamento (Custos)</h3>
                                         <button onClick={addPaymentMethod} className="text-xs bg-red-100 text-red-700 px-3 py-1 rounded-full font-bold hover:bg-red-200">+ Método</button>
                                     </div>
                                     <div className="bg-gray-50 dark:bg-gray-700/30 p-4 rounded-xl border border-gray-200 dark:border-gray-600 space-y-3">
@@ -473,17 +289,6 @@ const Finance: React.FC = () => {
                                                             <span>Dia Vencimento:</span>
                                                             <input type="number" min="1" max="31" value={pm.dueDay || ''} onChange={(e) => updatePaymentMethod(idx, 'dueDay', parseInt(e.target.value))} className="p-1 rounded border border-gray-300" placeholder="Dia" />
                                                         </div>
-                                                        {/* Botão solicitado para ver lançamentos DENTRO do formulário de edição */}
-                                                        {editingAccount && (
-                                                            <button 
-                                                                type="button"
-                                                                onClick={() => setStatementViewer({ account: editingAccount, method: pm })}
-                                                                className="col-span-2 mt-2 w-full py-2 bg-indigo-600 text-white rounded font-bold text-xs hover:bg-indigo-700 flex items-center justify-center gap-2"
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
-                                                                Ver Lançamentos (Fatura)
-                                                            </button>
-                                                        )}
                                                     </div>
                                                 )}
                                             </div>
