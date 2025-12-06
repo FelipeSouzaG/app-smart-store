@@ -20,22 +20,22 @@ const formatDateUTC = (dateString: Date | string | undefined) => {
 const CreditCardStatementModal: React.FC<{ 
     account: FinancialAccount, 
     method: PaymentMethodConfig, 
-    transactions: CashTransaction[], 
     onClose: () => void 
-}> = ({ account, method, transactions, onClose }) => {
-    
-    // Filtrar apenas transações deste cartão específico
-    const cardTransactions = useMemo(() => {
-        return transactions.filter(t => 
-            t.financialAccountId === account.id && 
-            t.paymentMethodId === method.id
-        ).sort((a, b) => {
-            const dateA = a.dueDate ? new Date(a.dueDate).getTime() : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
-            const dateB = b.dueDate ? new Date(b.dueDate).getTime() : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
-            // Sort by Due Date descending (Future first)
-            return dateB - dateA;
-        });
-    }, [transactions, account, method]);
+}> = ({ account, method, onClose }) => {
+    const { apiCall } = useContext(AuthContext);
+    const [cardTransactions, setCardTransactions] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchItems = async () => {
+            const data = await apiCall(`financial/statement?accountId=${account.id}&methodId=${method.id}`, 'GET');
+            if (data) {
+                setCardTransactions(data);
+            }
+            setLoading(false);
+        };
+        fetchItems();
+    }, [account, method]);
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[70] p-4">
@@ -51,7 +51,9 @@ const CreditCardStatementModal: React.FC<{
                 </div>
 
                 <div className="p-6 overflow-x-auto">
-                    {cardTransactions.length === 0 ? (
+                    {loading ? (
+                        <p className="text-center text-gray-500 py-8">Carregando extrato...</p>
+                    ) : cardTransactions.length === 0 ? (
                         <p className="text-center text-gray-500 py-8">Nenhum custo lançado neste cartão ainda.</p>
                     ) : (
                         <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
@@ -60,10 +62,9 @@ const CreditCardStatementModal: React.FC<{
                                     <th className="px-4 py-3">Descrição</th>
                                     <th className="px-4 py-3">Categoria</th>
                                     <th className="px-4 py-3">Valor</th>
-                                    <th className="px-4 py-3 text-center">Status</th>
-                                    <th className="px-4 py-3">Data do Custo</th>
-                                    <th className="px-4 py-3">Data de Vencimento</th>
-                                    <th className="px-4 py-3">Data de Pagamento</th>
+                                    <th className="px-4 py-3">Data Compra</th>
+                                    <th className="px-4 py-3">Vencimento Fatura</th>
+                                    <th className="px-4 py-3">Parcela</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -76,23 +77,12 @@ const CreditCardStatementModal: React.FC<{
                                         <td className="px-4 py-3 font-semibold text-red-500">
                                             R$ {formatCurrencyNumber(item.amount)}
                                         </td>
-                                        <td className="px-4 py-3 text-center">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${
-                                                item.status === TransactionStatus.PAID 
-                                                ? 'bg-green-100 text-green-800' 
-                                                : 'bg-yellow-100 text-yellow-800'
-                                            }`}>
-                                                {item.status}
-                                            </span>
-                                        </td>
                                         <td className="px-4 py-3">{formatDateUTC(item.timestamp)}</td>
                                         <td className="px-4 py-3 font-bold text-gray-700 dark:text-gray-300">
                                             {formatDateUTC(item.dueDate)}
                                         </td>
-                                        <td className="px-4 py-3">
-                                            {item.status === TransactionStatus.PAID ? (
-                                                <span className="text-green-600">{formatDateUTC(item.paymentDate)}</span>
-                                            ) : '-'}
+                                        <td className="px-4 py-3 text-xs">
+                                            {item.installmentNumber} / {item.totalInstallments}
                                         </td>
                                     </tr>
                                 ))}
@@ -256,7 +246,6 @@ const Finance: React.FC = () => {
                 <CreditCardStatementModal 
                     account={statementViewer.account} 
                     method={statementViewer.method} 
-                    transactions={transactions} 
                     onClose={() => setStatementViewer(null)} 
                 />
             )}
