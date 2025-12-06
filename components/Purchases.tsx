@@ -1,11 +1,9 @@
 
-// ... existing imports ...
 import React, { useState, useEffect, useContext, useRef, useMemo } from 'react';
 import { PurchaseOrder, Product, PurchaseItem, TransactionStatus, FinancialAccount, PaymentMethod } from '../types';
 import { AuthContext } from '../contexts/AuthContext';
 import { formatCurrencyNumber, formatMoney } from '../validation';
 
-// ... ScannerModal ...
 declare global { interface Window { ZXing: any; } }
 const ScannerModal: React.FC<{ onClose: () => void; onScan: (code: string) => void }> = ({ onClose, onScan }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
@@ -72,8 +70,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
     const [isScannerOpen, setIsScannerOpen] = useState(false);
     const [error, setError] = useState('');
     const [isSaving, setIsSaving] = useState(false);
-
-    const today = new Date().toISOString().split('T')[0];
 
     useEffect(() => {
         const fetchAccounts = async () => {
@@ -154,10 +150,8 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             if (!selectedAccountId) { setError('Selecione conta de pagamento.'); return; }
             if (!isCashBox && !selectedMethodId) { setError('Selecione método de pagamento.'); return; }
             
-            // Date restriction for non-credit payments
             if (!isCreditCard) {
                 if (!paymentDate) { setError('Data do pagamento obrigatória.'); return; }
-                if (paymentDate > today) { setError('Data de pagamento não pode ser futura para métodos à vista.'); return; }
             }
         }
 
@@ -287,7 +281,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                                     <div><label className="block text-sm font-medium mb-1 text-yellow-600">Vencimento</label><input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full rounded-md bg-white dark:bg-gray-600 border-yellow-300 shadow-sm p-2"/></div>
                                 )}
                                 {status === TransactionStatus.PAID && !isCreditCard && (
-                                    <div><label className="block text-sm font-medium mb-1 text-green-600">Data do Pagamento</label><input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} max={today} className="w-full rounded-md bg-white dark:bg-gray-600 border-green-300 shadow-sm p-2"/></div>
+                                    <div><label className="block text-sm font-medium mb-1 text-green-600">Data do Pagamento</label><input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="w-full rounded-md bg-white dark:bg-gray-600 border-green-300 shadow-sm p-2"/></div>
                                 )}
                             </div>
                         </div>
