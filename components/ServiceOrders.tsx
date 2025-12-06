@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useMemo, useContext, useRef } from 'react';
-import { ServiceOrder, ServiceOrderStatus, Service, ServiceBrand, Customer, KpiGoals, PaymentMethod } from '../types';
+import { ServiceOrder, ServiceOrderStatus, Service, ServiceBrand, Customer, KpiGoals, PaymentMethod, FinancialAccount, TransactionStatus } from '../types';
 import { AuthContext } from '../contexts/AuthContext';
 import { formatName, validateName, formatPhone, validatePhone, formatCurrencyNumber, formatRegister, formatMoney, validateRegister } from '../validation';
 
@@ -17,7 +17,7 @@ interface ServiceOrdersProps {
     onAddServiceOrder: (order: Omit<ServiceOrder, 'id' | 'createdAt' | 'status'>) => void;
     onUpdateServiceOrder: (order: ServiceOrder) => void;
     onDeleteServiceOrder: (orderId: string) => void;
-    onToggleStatus: (orderId: string, paymentData?: { paymentMethod: PaymentMethod, discount: number, finalPrice: number }) => Promise<any>;
+    onToggleStatus: (orderId: string, paymentData?: any) => Promise<any>;
     setActivePage: (page: string) => void;
     goals: KpiGoals;
 }
@@ -52,7 +52,7 @@ const ReceiptModal: React.FC<{ imageData: string; fileName: string; onClose: () 
     };
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-50 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-[150] p-4">
             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-2xl w-full max-w-md flex flex-col items-center">
                 <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Comprovante de Serviço</h3>
                 <div className="border border-gray-200 rounded-lg overflow-hidden mb-6 max-h-[60vh] overflow-y-auto bg-white">
@@ -77,6 +77,135 @@ const ReceiptModal: React.FC<{ imageData: string; fileName: string; onClose: () 
                         </button>
                     </div>
                 )}
+            </div>
+        </div>
+    );
+};
+
+// Modal to Handle Cost Payment
+const CostPaymentModal: React.FC<{
+    order: ServiceOrder,
+    accounts: FinancialAccount[],
+    onClose: () => void,
+    onConfirm: (costDetails: any) => void
+}> = ({ order, accounts, onClose, onConfirm }) => {
+    const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PENDING);
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]); // Due Date or Payment Date
+    const [selectedAccountId, setSelectedAccountId] = useState('cash-box');
+    const [selectedMethodId, setSelectedMethodId] = useState('');
+    const [installments, setInstallments] = useState(1);
+
+    const isCashBox = selectedAccountId === 'cash-box';
+    const selectedAccount = accounts.find(a => a.id === selectedAccountId);
+    const selectedMethod = selectedAccount?.paymentMethods.find(m => m.id === selectedMethodId);
+    const isCreditCard = !isCashBox && selectedMethod?.type === 'Credit';
+
+    const handleConfirm = () => {
+        if (status === TransactionStatus.PAID && !isCashBox && !selectedMethodId) {
+            alert("Selecione um método de pagamento.");
+            return;
+        }
+        if (!date) {
+            alert("Selecione uma data.");
+            return;
+        }
+
+        onConfirm({
+            status,
+            financialAccountId: selectedAccountId,
+            paymentMethodId: selectedMethodId,
+            date,
+            installments: isCreditCard ? installments : 1
+        });
+    };
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md animate-fade-in">
+                <h3 className="text-lg font-bold mb-4 text-gray-900 dark:text-white">Pagamento do Custo do Serviço</h3>
+                <p className="text-sm text-gray-500 mb-4">
+                    Este serviço tem um custo de <strong className="text-red-500">R$ {formatCurrencyNumber(order.totalCost)}</strong> (Peça/Mão de obra).
+                    Como deseja registrar essa saída?
+                </p>
+
+                <div className="space-y-4">
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Status do Pagamento</label>
+                        <select 
+                            value={status} 
+                            onChange={(e) => setStatus(e.target.value as TransactionStatus)}
+                            className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                        >
+                            <option value={TransactionStatus.PENDING}>Pendente (A Pagar)</option>
+                            <option value={TransactionStatus.PAID}>Pago (Realizado)</option>
+                        </select>
+                    </div>
+
+                    {status === TransactionStatus.PENDING && (
+                        <div>
+                            <label className="block text-sm font-medium mb-1">Vencimento</label>
+                            <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600" />
+                        </div>
+                    )}
+
+                    {status === TransactionStatus.PAID && (
+                        <>
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Conta de Saída</label>
+                                <select 
+                                    value={selectedAccountId} 
+                                    onChange={(e) => { setSelectedAccountId(e.target.value); setSelectedMethodId(''); }}
+                                    className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                                >
+                                    <option value="cash-box">Dinheiro do Caixa</option>
+                                    <optgroup label="Bancos">
+                                        {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName}</option>)}
+                                    </optgroup>
+                                </select>
+                            </div>
+
+                            {!isCashBox && (
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Método</label>
+                                    <select 
+                                        value={selectedMethodId} 
+                                        onChange={(e) => setSelectedMethodId(e.target.value)}
+                                        className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {selectedAccount?.paymentMethods.map(m => <option key={m.id} value={m.id}>{m.name} ({m.type})</option>)}
+                                    </select>
+                                </div>
+                            )}
+
+                            {isCreditCard && (
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Parcelas</label>
+                                    <select 
+                                        value={installments} 
+                                        onChange={(e) => setInstallments(Number(e.target.value))}
+                                        className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                                    >
+                                        {Array.from({length: 12}, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}x</option>)}
+                                    </select>
+                                    <p className="text-xs text-orange-500 mt-1">Serão geradas parcelas na fatura deste cartão.</p>
+                                </div>
+                            )}
+
+                            {!isCreditCard && (
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Data do Pagamento</label>
+                                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600" />
+                                </div>
+                            )}
+                        </>
+                    )}
+                </div>
+
+                <div className="flex justify-end gap-3 mt-6">
+                    <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 rounded text-gray-800 dark:text-white">Cancelar</button>
+                    <button onClick={handleConfirm} className="px-4 py-2 bg-indigo-600 text-white rounded font-bold hover:bg-indigo-700">Confirmar</button>
+                </div>
             </div>
         </div>
     );
@@ -501,7 +630,7 @@ const PaymentModal: React.FC<{
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md">
+            <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-md animate-fade-in">
                 <h3 className="text-xl font-bold mb-4 text-gray-900 dark:text-white">Concluir e Pagar OS #{order.id}</h3>
                 
                 <div className="mb-4">
@@ -510,7 +639,7 @@ const PaymentModal: React.FC<{
                 </div>
 
                 <div className="mb-4">
-                    <h4 className="font-semibold mb-2 text-sm">Forma de Pagamento</h4>
+                    <h4 className="font-semibold mb-2 text-sm">Forma de Pagamento (Cliente)</h4>
                     <div className="grid grid-cols-2 gap-2">
                         <button onClick={() => setSelectedPaymentMethod(PaymentMethod.PIX)} className={`py-2 px-2 rounded-md text-sm font-medium transition-colors ${selectedPaymentMethod === PaymentMethod.PIX ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Pix</button>
                         <button onClick={() => setSelectedPaymentMethod(PaymentMethod.CASH)} className={`py-2 px-2 rounded-md text-sm font-medium transition-colors ${selectedPaymentMethod === PaymentMethod.CASH ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Dinheiro</button>
@@ -550,7 +679,9 @@ const PaymentModal: React.FC<{
 
                 <div className="flex justify-end space-x-4">
                     <button onClick={onClose} className="px-4 py-2 rounded-md text-gray-700 bg-gray-200 dark:bg-gray-600 dark:text-gray-200 hover:bg-gray-300">Cancelar</button>
-                    <button onClick={handleFinish} disabled={!selectedPaymentMethod} className="px-4 py-2 rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed">Finalizar</button>
+                    <button onClick={handleFinish} disabled={!selectedPaymentMethod} className="px-4 py-2 rounded-md text-white bg-green-600 hover:bg-green-700 disabled:bg-green-400 disabled:cursor-not-allowed">
+                        {order.totalCost > 0 ? 'Próximo: Pagar Custo' : 'Finalizar'}
+                    </button>
                 </div>
             </div>
         </div>
@@ -572,10 +703,11 @@ const ConfirmationModal: React.FC<{ message: string; onConfirm: () => void; onCa
 
 
 const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, onAddServiceOrder, onUpdateServiceOrder, onDeleteServiceOrder, onToggleStatus, setActivePage, goals }) => {
-    const { user } = useContext(AuthContext);
+    const { user, apiCall } = useContext(AuthContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingOrder, setEditingOrder] = useState<ServiceOrder | null>(null);
     const [deletingOrderId, setDeletingOrderId] = useState<string | null>(null);
+    const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
     
     const [statusFilter, setStatusFilter] = useState<ServiceOrderStatus | 'All'>(ServiceOrderStatus.PENDING);
     const [searchTerm, setSearchTerm] = useState('');
@@ -584,11 +716,23 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
 
     // Payment/Completion Flow State
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [isCostModalOpen, setIsCostModalOpen] = useState(false);
     const [orderToComplete, setOrderToComplete] = useState<ServiceOrder | null>(null);
+    // Temp storage for revenue payment info before cost step
+    const [tempPaymentInfo, setTempPaymentInfo] = useState<{paymentMethod: PaymentMethod, discount: number, finalPrice: number} | null>(null);
+
     const [generatedReceiptImage, setGeneratedReceiptImage] = useState<string | null>(null);
     const [isReceiptPromptOpen, setIsReceiptPromptOpen] = useState(false);
     const receiptRef = useRef<HTMLDivElement>(null);
 
+    // Fetch accounts when opening component
+    useEffect(() => {
+        const fetchAccounts = async () => {
+            const data = await apiCall('financial', 'GET');
+            if (data) setAccounts(data);
+        };
+        fetchAccounts();
+    }, [apiCall]);
 
     const handleSaveOrder = (orderData: Omit<ServiceOrder, 'id' | 'createdAt' | 'status'> | ServiceOrder) => {
         if ('id' in orderData) {
@@ -628,16 +772,40 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
         }
     };
 
+    // Step 1: Customer Payment Confirmed
     const handlePaymentComplete = async (paymentMethod: PaymentMethod, discount: number, finalPrice: number) => {
+        setIsPaymentModalOpen(false);
+        
         if (orderToComplete) {
-            const updatedOrder = await onToggleStatus(orderToComplete.id, { paymentMethod, discount, finalPrice });
-            setIsPaymentModalOpen(false);
-            
-            if (updatedOrder) {
-                // Update local reference for receipt generation
-                setOrderToComplete(updatedOrder); 
-                setIsReceiptPromptOpen(true);
+            const cost = orderToComplete.totalCost;
+            if (cost > 0) {
+                // Step 2: If cost > 0, open cost modal
+                setTempPaymentInfo({ paymentMethod, discount, finalPrice });
+                setIsCostModalOpen(true);
+            } else {
+                // No cost, finish directly
+                await finishOrder(orderToComplete.id, { paymentMethod, discount, finalPrice });
             }
+        }
+    };
+
+    // Step 2 (Optional): Cost Payment Confirmed
+    const handleCostComplete = async (costDetails: any) => {
+        setIsCostModalOpen(false);
+        if (orderToComplete && tempPaymentInfo) {
+            await finishOrder(orderToComplete.id, {
+                ...tempPaymentInfo,
+                costPaymentDetails: costDetails
+            });
+        }
+        setTempPaymentInfo(null);
+    };
+
+    const finishOrder = async (orderId: string, payload: any) => {
+        const updatedOrder = await onToggleStatus(orderId, payload);
+        if (updatedOrder) {
+            setOrderToComplete(updatedOrder); 
+            setIsReceiptPromptOpen(true);
         }
     };
 
@@ -731,8 +899,17 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
                 />
             )}
 
+            {isCostModalOpen && orderToComplete && (
+                <CostPaymentModal 
+                    order={orderToComplete}
+                    accounts={accounts}
+                    onClose={() => { setIsCostModalOpen(false); setOrderToComplete(null); setTempPaymentInfo(null); }}
+                    onConfirm={handleCostComplete}
+                />
+            )}
+
             {isReceiptPromptOpen && (
-                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+                <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[140]">
                     <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl max-w-sm w-full text-center">
                         <h3 className="text-xl font-bold mb-4 dark:text-white">Serviço Concluído!</h3>
                         <p className="mb-6 text-gray-600 dark:text-gray-300">Deseja gerar a notinha (comprovante) para enviar ao cliente?</p>
