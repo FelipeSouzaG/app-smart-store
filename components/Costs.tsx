@@ -111,7 +111,6 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
         if (isCreditCard && selectedMethod && selectedMethod.closingDay && selectedMethod.dueDay) {
             const pDate = new Date(purchaseDate);
             // Fix timezone offset for day calculation
-            // We pretend the date string is UTC to get the correct day number regardless of timezone
             const pDay = parseInt(purchaseDate.split('-')[2]); 
             
             let targetMonth = pDate.getMonth();
@@ -128,10 +127,14 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             
             // Determine Due Date
             const estDate = new Date(targetYear, targetMonth, selectedMethod.dueDay);
-            return estDate.toLocaleDateString('pt-BR');
+            const estDateStr = estDate.toLocaleDateString('pt-BR');
+            const amountVal = parseCurrency(amount);
+            const instVal = installments > 0 ? amountVal / installments : amountVal;
+
+            return { date: estDateStr, value: formatCurrencyNumber(instVal) };
         }
         return null;
-    }, [isCreditCard, selectedMethod, purchaseDate]);
+    }, [isCreditCard, selectedMethod, purchaseDate, amount, installments]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -172,7 +175,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             type: TransactionType.EXPENSE,
             category,
             // FORCE PENDING if Credit Card, otherwise use selected status
-            // Reasoning: A credit card purchase is "Paid" at the store, but "Pending" in the bank account until the bill is paid.
+            // Credit card purchases are effectively "Pending" until the invoice is paid.
             status: isCreditCard ? TransactionStatus.PENDING : status, 
             timestamp: createDateAsUTC(purchaseDate), // Competence
             financialAccountId: selectedAccountId || undefined,
@@ -183,8 +186,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
         // --- DATE LOGIC --- //
         
         if (isCreditCard) {
-            // Backend handles due date calculation based on closing day.
-            // Payment date is null until bill is paid.
+            // Backend handles generation of multiple transactions with correct due dates.
             transactionPayload.dueDate = null; 
             transactionPayload.paymentDate = null;
         } else {
@@ -194,7 +196,6 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                 transactionPayload.paymentDate = null;
             } else {
                 // PAID (Cash/Pix/Debit)
-                // Use payment date as due date if due date is missing (immediate payment)
                 transactionPayload.dueDate = createDateAsUTC(dueDate || paymentDate); 
                 transactionPayload.paymentDate = createDateAsUTC(paymentDate);
             }
@@ -228,7 +229,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                     
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium mb-1">Valor (R$)</label>
+                            <label className="block text-sm font-medium mb-1">Valor Total (R$)</label>
                             <input type="text" value={amount} onChange={e => handleCurrencyChange(e.target.value, setAmount)} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 font-bold text-red-500 focus:ring-2 focus:ring-red-500"/>
                         </div>
                         <div>
@@ -336,10 +337,15 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                                             ))}
                                         </select>
                                     </div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-                                        <p>📅 <strong>Vencimento da Fatura:</strong> {creditCardEstimate || 'Calculando...'}</p>
-                                        <p className="text-orange-500 font-medium">⚠ O sistema agendará o pagamento para o dia da fatura.</p>
-                                    </div>
+                                    {creditCardEstimate && (
+                                        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                                            <p>💳 <strong>1ª Parcela:</strong> R$ {creditCardEstimate.value}</p>
+                                            <p>📅 <strong>1º Vencimento:</strong> {creditCardEstimate.date}</p>
+                                            <p className="text-orange-500 font-medium mt-1">
+                                                ⚠ Serão geradas {installments} contas "Pendente" (Contas a Pagar) para cada vencimento da fatura.
+                                            </p>
+                                        </div>
+                                    )}
                                 </div>
                             )}
 
