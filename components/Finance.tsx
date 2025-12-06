@@ -11,152 +11,101 @@ const methodTypes = {
     'Boleto': 'Boleto'
 };
 
-const formatDateUTC = (dateString: Date | string) => {
+const formatDateUTC = (dateString: Date | string | undefined) => {
     if (!dateString) return '-';
     return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 };
 
-// Modal for Invoice Details
-const InvoiceDetailsModal: React.FC<{ 
+// Nova Tabela Específica para o Cartão de Crédito
+const CreditCardStatementModal: React.FC<{ 
     account: FinancialAccount, 
     method: PaymentMethodConfig, 
     transactions: CashTransaction[], 
     onClose: () => void 
 }> = ({ account, method, transactions, onClose }) => {
     
-    // Group transactions by Due Date (Invoice Month)
-    const invoices = useMemo(() => {
-        const groups: { [key: string]: { date: Date, items: CashTransaction[], total: number, status: TransactionStatus } } = {};
-        
-        // Filter transactions specific to this Card (Account + Method)
-        const relevantTransactions = transactions.filter(t => 
+    // Filtrar apenas transações deste cartão específico
+    const cardTransactions = useMemo(() => {
+        return transactions.filter(t => 
             t.financialAccountId === account.id && 
             t.paymentMethodId === method.id
-        );
-
-        relevantTransactions.forEach(t => {
-            if (!t.dueDate) return;
-            const dateKey = new Date(t.dueDate).toISOString().split('T')[0]; // YYYY-MM-DD
-            
-            if (!groups[dateKey]) {
-                groups[dateKey] = {
-                    date: new Date(t.dueDate),
-                    items: [],
-                    total: 0,
-                    status: TransactionStatus.PAID // Default to Paid, change to Pending if any item is Pending
-                };
-            }
-            
-            groups[dateKey].items.push(t);
-            groups[dateKey].total += t.amount;
-            if (t.status === TransactionStatus.PENDING) {
-                groups[dateKey].status = TransactionStatus.PENDING;
-            }
+        ).sort((a, b) => {
+            const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+            const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+            return dateB - dateA;
         });
-
-        // Convert to array and sort by Date descending
-        return Object.values(groups).sort((a, b) => b.date.getTime() - a.date.getTime());
     }, [transactions, account, method]);
 
-    const [expandedInvoiceDate, setExpandedInvoiceDate] = useState<string | null>(null);
-
-    const toggleInvoice = (dateKey: string) => {
-        if (expandedInvoiceDate === dateKey) setExpandedInvoiceDate(null);
-        else setExpandedInvoiceDate(dateKey);
-    }
-
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[60] p-4">
-            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col">
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[70] p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-6xl max-h-[90vh] overflow-y-auto flex flex-col">
                 <div className="p-6 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
                     <div>
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">
-                            Faturas: {method.name}
+                            Extrato: {method.name}
                         </h2>
-                        <p className="text-sm text-gray-500">{account.bankName}</p>
+                        <p className="text-sm text-gray-500">{account.bankName} - Cartão de Crédito</p>
                     </div>
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:hover:text-white text-2xl">&times;</button>
                 </div>
 
-                <div className="p-6 space-y-4">
-                    {invoices.length === 0 ? (
-                        <p className="text-center text-gray-500 py-8">Nenhuma fatura encontrada para este cartão.</p>
+                <div className="p-6 overflow-x-auto">
+                    {cardTransactions.length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">Nenhum custo lançado neste cartão ainda.</p>
                     ) : (
-                        invoices.map((inv) => {
-                            const dateKey = inv.date.toISOString();
-                            const isExpanded = expandedInvoiceDate === dateKey;
-                            const monthName = inv.date.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric', timeZone: 'UTC' });
-
-                            return (
-                                <div key={dateKey} className="border border-gray-200 dark:border-gray-700 rounded-lg overflow-hidden">
-                                    <div 
-                                        className="bg-gray-50 dark:bg-gray-700/50 p-4 flex justify-between items-center cursor-pointer hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
-                                        onClick={() => toggleInvoice(dateKey)}
-                                    >
-                                        <div className="flex items-center gap-4">
-                                            <div className={`p-2 rounded-full ${isExpanded ? 'bg-indigo-100 text-indigo-600' : 'bg-gray-200 text-gray-500'}`}>
-                                                <svg className={`w-5 h-5 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                                                </svg>
-                                            </div>
-                                            <div>
-                                                <h3 className="font-bold text-gray-800 dark:text-white capitalize">{monthName}</h3>
-                                                <p className="text-xs text-gray-500">Vencimento: {formatDateUTC(inv.date)}</p>
-                                            </div>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="font-bold text-lg text-gray-900 dark:text-white">R$ {formatCurrencyNumber(inv.total)}</p>
-                                            <span className={`text-xs font-semibold px-2 py-0.5 rounded-full ${inv.status === TransactionStatus.PAID ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
-                                                {inv.status}
+                        <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                            <thead className="text-xs text-gray-700 uppercase bg-gray-100 dark:bg-gray-700 dark:text-gray-400">
+                                <tr>
+                                    <th className="px-4 py-3">Descrição</th>
+                                    <th className="px-4 py-3">Categoria</th>
+                                    <th className="px-4 py-3">Valor</th>
+                                    <th className="px-4 py-3 text-center">Status</th>
+                                    <th className="px-4 py-3">Data do Custo</th>
+                                    <th className="px-4 py-3">Data de Vencimento</th>
+                                    <th className="px-4 py-3">Data de Pagamento</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {cardTransactions.map(item => (
+                                    <tr key={item.id} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                                        <td className="px-4 py-3 font-medium text-gray-900 dark:text-white">
+                                            {item.description}
+                                        </td>
+                                        <td className="px-4 py-3">{item.category}</td>
+                                        <td className="px-4 py-3 font-semibold text-red-500">
+                                            R$ {formatCurrencyNumber(item.amount)}
+                                        </td>
+                                        <td className="px-4 py-3 text-center">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${
+                                                item.status === TransactionStatus.PAID 
+                                                ? 'bg-green-100 text-green-800' 
+                                                : 'bg-yellow-100 text-yellow-800'
+                                            }`}>
+                                                {item.status}
                                             </span>
-                                        </div>
-                                    </div>
-
-                                    {isExpanded && (
-                                        <div className="p-4 bg-white dark:bg-gray-800 border-t dark:border-gray-700 animate-fade-in">
-                                            <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                                                <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
-                                                    <tr>
-                                                        <th className="px-4 py-2">Descrição</th>
-                                                        <th className="px-4 py-2">Categoria</th>
-                                                        <th className="px-4 py-2">Compra</th>
-                                                        <th className="px-4 py-2 text-right">Valor</th>
-                                                        <th className="px-4 py-2 text-center">Status</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {inv.items.map(item => (
-                                                        <tr key={item.id} className="border-b dark:border-gray-700 last:border-0 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                                            <td className="px-4 py-2 font-medium text-gray-900 dark:text-white">
-                                                                {item.description}
-                                                            </td>
-                                                            <td className="px-4 py-2">{item.category}</td>
-                                                            <td className="px-4 py-2">{formatDateUTC(item.timestamp)}</td>
-                                                            <td className="px-4 py-2 text-right font-semibold">
-                                                                R$ {formatCurrencyNumber(item.amount)}
-                                                            </td>
-                                                            <td className="px-4 py-2 text-center">
-                                                                {item.status === TransactionStatus.PAID ? (
-                                                                    <span className="text-green-500">●</span>
-                                                                ) : (
-                                                                    <span className="text-yellow-500">●</span>
-                                                                )}
-                                                            </td>
-                                                        </tr>
-                                                    ))}
-                                                </tbody>
-                                            </table>
-                                        </div>
-                                    )}
-                                </div>
-                            );
-                        })
+                                        </td>
+                                        <td className="px-4 py-3">{formatDateUTC(item.timestamp)}</td>
+                                        <td className="px-4 py-3 font-bold text-gray-700 dark:text-gray-300">
+                                            {formatDateUTC(item.dueDate)}
+                                        </td>
+                                        <td className="px-4 py-3">
+                                            {item.status === TransactionStatus.PAID ? (
+                                                <span className="text-green-600">{formatDateUTC(item.paymentDate)}</span>
+                                            ) : '-'}
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
                     )}
+                </div>
+                <div className="p-4 border-t dark:border-gray-700 bg-gray-50 dark:bg-gray-800 text-right">
+                    <button onClick={onClose} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg">Fechar Tabela</button>
                 </div>
             </div>
         </div>
     );
-}
+};
 
 const Finance: React.FC = () => {
     const { apiCall } = useContext(AuthContext);
@@ -168,7 +117,7 @@ const Finance: React.FC = () => {
     const [loading, setLoading] = useState(false);
 
     // Invoice View State
-    const [invoiceViewer, setInvoiceViewer] = useState<{ account: FinancialAccount, method: PaymentMethodConfig } | null>(null);
+    const [statementViewer, setStatementViewer] = useState<{ account: FinancialAccount, method: PaymentMethodConfig } | null>(null);
 
     // Form State
     const [bankName, setBankName] = useState('');
@@ -279,12 +228,12 @@ const Finance: React.FC = () => {
 
     return (
         <div className="container mx-auto p-4">
-            {invoiceViewer && (
-                <InvoiceDetailsModal 
-                    account={invoiceViewer.account} 
-                    method={invoiceViewer.method} 
+            {statementViewer && (
+                <CreditCardStatementModal 
+                    account={statementViewer.account} 
+                    method={statementViewer.method} 
                     transactions={transactions} 
-                    onClose={() => setInvoiceViewer(null)} 
+                    onClose={() => setStatementViewer(null)} 
                 />
             )}
 
@@ -304,10 +253,10 @@ const Finance: React.FC = () => {
                         <div className="p-4 bg-gray-50 dark:bg-gray-700 border-b dark:border-gray-600 flex justify-between items-center">
                             <h3 className="text-xl font-bold text-indigo-600 dark:text-indigo-400">{acc.bankName}</h3>
                             <div className="flex gap-2">
-                                <button onClick={() => handleOpenModal(acc)} className="text-gray-500 hover:text-indigo-500">
+                                <button onClick={() => handleOpenModal(acc)} className="text-gray-500 hover:text-indigo-500" title="Editar">
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
                                 </button>
-                                <button onClick={() => handleDelete(acc.id)} className="text-gray-500 hover:text-red-500">
+                                <button onClick={() => handleDelete(acc.id)} className="text-gray-500 hover:text-red-500" title="Excluir">
                                     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
                                 </button>
                             </div>
@@ -341,10 +290,10 @@ const Finance: React.FC = () => {
                                                 </div>
                                                 {pm.type === 'Credit' && (
                                                     <button 
-                                                        onClick={() => setInvoiceViewer({ account: acc, method: pm })}
+                                                        onClick={() => setStatementViewer({ account: acc, method: pm })}
                                                         className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200 transition-colors"
                                                     >
-                                                        Ver Faturas
+                                                        Extrato
                                                     </button>
                                                 )}
                                             </li>
@@ -468,9 +417,17 @@ const Finance: React.FC = () => {
                                                             <span>Dia Vencimento:</span>
                                                             <input type="number" min="1" max="31" value={pm.dueDay || ''} onChange={(e) => updatePaymentMethod(idx, 'dueDay', parseInt(e.target.value))} className="p-1 rounded border border-gray-300" placeholder="Dia" />
                                                         </div>
-                                                        <p className="col-span-2 text-[10px] text-yellow-600 dark:text-yellow-400">
-                                                            *Compras com este cartão serão lançadas no dia do vencimento.
-                                                        </p>
+                                                        {/* Botão solicitado para ver lançamentos DENTRO do formulário de edição */}
+                                                        {editingAccount && (
+                                                            <button 
+                                                                type="button"
+                                                                onClick={() => setStatementViewer({ account: editingAccount, method: pm })}
+                                                                className="col-span-2 mt-2 w-full py-2 bg-indigo-600 text-white rounded font-bold text-xs hover:bg-indigo-700 flex items-center justify-center gap-2"
+                                                            >
+                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                                                                Ver Lançamentos (Fatura)
+                                                            </button>
+                                                        )}
                                                     </div>
                                                 )}
                                             </div>
