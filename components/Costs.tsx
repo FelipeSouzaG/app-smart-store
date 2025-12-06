@@ -185,18 +185,37 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
         setError('');
 
          const transactionPayload: any = {
-            description: formatName(description),
-            amount: numericAmount,
-            type: TransactionType.EXPENSE,
-            category,
-            // FORCE PENDING if Credit Card, otherwise use selected status
-            // Credit card purchases are effectively "Pending" until the invoice is paid.
-            status: isCreditCard ? TransactionStatus.PENDING : status, 
-            timestamp: createDateAsUTC(purchaseDate), // Competence
-            financialAccountId: selectedAccountId || undefined,
-            paymentMethodId: (!isCashBox && selectedMethodId) ? selectedMethodId : undefined,
-            installments: isCreditCard ? installments : 1
-        };
+    description: formatName(description),
+    amount: numericAmount,
+    type: TransactionType.EXPENSE,
+    category,
+    // FORCE PENDING if Credit Card, otherwise use selected status
+    // Credit card purchases are effectively "Pending" until the invoice is paid.
+    status: isCreditCard ? TransactionStatus.PENDING : status, 
+    timestamp: createDateAsUTC(purchaseDate), // Competence
+    financialAccountId: selectedAccountId || undefined,
+    paymentMethodId: (!isCashBox && selectedMethodId) ? selectedMethodId : undefined,
+    installments: isCreditCard ? installments : 1,
+    // NEW: explicit flag to backend to route to card statement table
+    isCreditCard: Boolean(isCreditCard),
+};
+
+// --- DATE LOGIC (permanece igual) ---
+if (isCreditCard) {
+    // Backend handles generation of multiple transactions with correct due dates.
+    transactionPayload.dueDate = null; 
+    transactionPayload.paymentDate = null;
+} else {
+    // Manual Dates (CashBox, Bank-Debit, Bank-Pix, or Pending)
+    if (status === TransactionStatus.PENDING) {
+        transactionPayload.dueDate = createDateAsUTC(dueDate);
+        transactionPayload.paymentDate = null;
+    } else {
+        // PAID (Cash/Pix/Debit)
+        transactionPayload.dueDate = createDateAsUTC(dueDate || paymentDate); 
+        transactionPayload.paymentDate = createDateAsUTC(paymentDate);
+    }
+}
 
         // --- DATE LOGIC --- //
         
