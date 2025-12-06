@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useContext } from 'react';
 import { ServiceOrder, Service, TransactionStatus, FinancialAccount, KpiGoals, ServiceOrderStatus } from '../types';
 import { AuthContext } from '../contexts/AuthContext';
@@ -12,8 +13,6 @@ const CostPaymentModal: React.FC<{ order: ServiceOrder, accounts: FinancialAccou
     const [selectedMethodId, setSelectedMethodId] = useState('');
     const [installments, setInstallments] = useState(1);
 
-    const today = new Date().toISOString().split('T')[0];
-
     const isCashBox = selectedAccountId === 'cash-box';
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
     const selectedMethod = selectedAccount?.paymentMethods.find(m => (m.id || (m as any)._id) === selectedMethodId);
@@ -27,11 +26,6 @@ const CostPaymentModal: React.FC<{ order: ServiceOrder, accounts: FinancialAccou
             }
             if (!date) {
                 alert("Selecione uma data.");
-                return;
-            }
-            // Date restriction logic
-            if (!isCreditCard && date > today) {
-                alert("Data de pagamento não pode ser futura para este método.");
                 return;
             }
         }
@@ -98,7 +92,7 @@ const CostPaymentModal: React.FC<{ order: ServiceOrder, accounts: FinancialAccou
                             {!isCreditCard && (
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Data do Pagamento</label>
-                                    <input type="date" value={date} onChange={e => setDate(e.target.value)} max={today} className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600" />
+                                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600" />
                                 </div>
                             )}
                         </>
