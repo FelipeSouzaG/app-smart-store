@@ -95,6 +95,9 @@ const CostPaymentModal: React.FC<{
     const [selectedMethodId, setSelectedMethodId] = useState('');
     const [installments, setInstallments] = useState(1);
 
+    // Data de hoje para validação
+    const today = new Date().toISOString().split('T')[0];
+
     const isCashBox = selectedAccountId === 'cash-box';
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
     
@@ -103,13 +106,20 @@ const CostPaymentModal: React.FC<{
     const isCreditCard = !isCashBox && selectedMethod?.type === 'Credit';
 
     const handleConfirm = () => {
-        if (status === TransactionStatus.PAID && !isCashBox && !selectedMethodId) {
-            alert("Selecione um método de pagamento.");
-            return;
-        }
-        if (!date) {
-            alert("Selecione uma data.");
-            return;
+        if (status === TransactionStatus.PAID) {
+            if (!isCashBox && !selectedMethodId) {
+                alert("Selecione um método de pagamento.");
+                return;
+            }
+            if (!date) {
+                alert("Selecione uma data.");
+                return;
+            }
+            // Bloqueio de data futura para pagamentos realizados (exceto cartão de crédito que vira fatura)
+            if (!isCreditCard && date > today) {
+                alert("A data do pagamento não pode ser futura.");
+                return;
+            }
         }
 
         const costPayload = {
@@ -207,7 +217,13 @@ const CostPaymentModal: React.FC<{
                             {!isCreditCard && (
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Data do Pagamento</label>
-                                    <input type="date" value={date} onChange={e => setDate(e.target.value)} className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600" />
+                                    <input 
+                                        type="date" 
+                                        value={date} 
+                                        onChange={e => setDate(e.target.value)} 
+                                        max={today} // Restringe datas futuras no input
+                                        className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600" 
+                                    />
                                     <p className="text-xs text-gray-500 mt-1">Será registrado como uma saída no <strong>Caixa</strong>.</p>
                                 </div>
                             )}
