@@ -98,9 +98,24 @@ const CostPaymentModal: React.FC<{
     const isCashBox = selectedAccountId === 'cash-box';
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
     const selectedMethod = selectedAccount?.paymentMethods.find(m => m.id === selectedMethodId);
+    
+    // DEBUG: Monitor variables changing
+    useEffect(() => {
+        console.log("DEBUG [CostModal]: Account Changed:", selectedAccountId);
+        console.log("DEBUG [CostModal]: Account Found:", selectedAccount?.bankName);
+    }, [selectedAccountId, selectedAccount]);
+
+    useEffect(() => {
+        console.log("DEBUG [CostModal]: Method Changed:", selectedMethodId);
+        console.log("DEBUG [CostModal]: Method Found Object:", selectedMethod);
+        console.log("DEBUG [CostModal]: Is Type Credit?", selectedMethod?.type === 'Credit');
+    }, [selectedMethodId, selectedMethod]);
+
     const isCreditCard = !isCashBox && selectedMethod?.type === 'Credit';
 
     const handleConfirm = () => {
+        console.log("DEBUG [CostModal]: Confirming Payment...");
+        
         if (status === TransactionStatus.PAID && !isCashBox && !selectedMethodId) {
             alert("Selecione um método de pagamento.");
             return;
@@ -110,13 +125,18 @@ const CostPaymentModal: React.FC<{
             return;
         }
 
-        onConfirm({
+        const costPayload = {
             status,
             financialAccountId: selectedAccountId,
             paymentMethodId: selectedMethodId,
             date,
             installments: isCreditCard ? installments : 1
-        });
+        };
+
+        console.log("DEBUG [CostModal]: Sending Payload:", costPayload);
+        console.log("DEBUG [CostModal]: Detected as Credit Card?", isCreditCard);
+
+        onConfirm(costPayload);
     };
 
     return (
@@ -667,6 +687,7 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
     };
 
     const handleInitiateCompletion = (order: ServiceOrder) => {
+        console.log("DEBUG: Initiating completion for order:", order);
         if (order.status === ServiceOrderStatus.PENDING) {
             setOrderToComplete(order);
             setIsPaymentModalOpen(true);
@@ -677,9 +698,11 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
 
     // --- REVISED FLOW ---
     const handlePaymentComplete = async (paymentMethod: PaymentMethod, discount: number, finalPrice: number) => {
+        console.log("DEBUG: Customer Payment Complete:", { paymentMethod, discount, finalPrice });
         setIsPaymentModalOpen(false);
         
         if (orderToComplete) {
+            console.log("DEBUG: Checking totalCost for order:", orderToComplete.totalCost);
             // Check if Cost > 0
             if (orderToComplete.totalCost > 0) {
                 // If yes, open Cost Modal
@@ -687,18 +710,22 @@ const ServiceOrders: React.FC<ServiceOrdersProps> = ({ services, serviceOrders, 
                 setIsCostModalOpen(true);
             } else {
                 // If no, skip cost registration and finish
+                console.log("DEBUG: No cost to register, finishing order directly.");
                 await finishOrder(orderToComplete.id, { paymentMethod, discount, finalPrice });
             }
         }
     };
 
     const handleCostComplete = async (costDetails: any) => {
+        console.log("DEBUG: Cost Payment Details Received:", costDetails);
         setIsCostModalOpen(false);
         if (orderToComplete && tempPaymentInfo) {
-            await finishOrder(orderToComplete.id, {
+            const finalPayload = {
                 ...tempPaymentInfo,
                 costPaymentDetails: costDetails
-            });
+            };
+            console.log("DEBUG: Sending Final Completion Payload:", finalPayload);
+            await finishOrder(orderToComplete.id, finalPayload);
         }
         setTempPaymentInfo(null);
     };
