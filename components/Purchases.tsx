@@ -497,38 +497,52 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
         const finalBank = bank === Bank.OTHER ? (customBank ? customBank : Bank.OTHER) : bank;
 
         switch(paymentMethod) {
-            case PaymentMethod.CASH:
-                paymentDetails = { method: paymentMethod, paymentDate: new Date(`${paymentDate}T12:00:00`) };
-                break;
-            case PaymentMethod.PIX:
-            case PaymentMethod.CREDIT_CARD:
-            case PaymentMethod.BANK_TRANSFER:
-            case PaymentMethod.DEBIT_CARD:
-                if (bank === Bank.OTHER && !customBank) {
-                    setError('Por favor, especifique o nome do banco/instituição.');
-                    return;
-                }
-                paymentDetails = { method: paymentMethod, bank: finalBank as Bank, paymentDate: new Date(`${paymentDate}T12:00:00`) };
-                break;
-            case PaymentMethod.BANK_SLIP:
-                if (bank === Bank.OTHER && !customBank) {
-                    setError('Por favor, especifique o nome do banco/instituição emissora do boleto.');
-                    return;
-                }
-                if (installments.some(inst => !inst.dueDate)) {
-                    setError('Por favor, preencha todas as datas de vencimento das parcelas.');
-                    return;
-                }
-                paymentDetails = { 
-                    method: PaymentMethod.BANK_SLIP, 
-                    installments,
-                    bank: finalBank as Bank
-                };
-                break;
-            default:
-                setError('Forma de pagamento inválida.');
-                return;
+    case PaymentMethod.CASH:
+        paymentDetails = { method: paymentMethod, paymentDate: new Date(`${paymentDate}T12:00:00`), isCreditCard: false };
+        break;
+    case PaymentMethod.PIX:
+    case PaymentMethod.BANK_TRANSFER:
+    case PaymentMethod.DEBIT_CARD:
+        if (bank === Bank.OTHER && !customBank) {
+            setError('Por favor, especifique o nome do banco/instituição.');
+            return;
         }
+        paymentDetails = { method: paymentMethod, bank: finalBank as Bank, paymentDate: new Date(`${paymentDate}T12:00:00`), isCreditCard: false };
+        break;
+    case PaymentMethod.CREDIT_CARD:
+        if (bank === Bank.OTHER && !customBank) {
+            setError('Por favor, especifique o nome do banco/instituição.');
+            return;
+        }
+        // Se for cartão de crédito: sinalize e envie parcelas/quantidade de parcelas
+        paymentDetails = { 
+            method: PaymentMethod.CREDIT_CARD, 
+            bank: finalBank as Bank, 
+            paymentDate: new Date(`${paymentDate}T12:00:00`),
+            installmentsCount,
+            isCreditCard: true
+        };
+        break;
+    case PaymentMethod.BANK_SLIP:
+        if (bank === Bank.OTHER && !customBank) {
+            setError('Por favor, especifique o nome do banco/instituição emissora do boleto.');
+            return;
+        }
+        if (installments.some(inst => !inst.dueDate)) {
+            setError('Por favor, preencha todas as datas de vencimento das parcelas.');
+            return;
+        }
+        paymentDetails = { 
+            method: PaymentMethod.BANK_SLIP, 
+            installments,
+            bank: finalBank as Bank,
+            isCreditCard: false
+        };
+        break;
+    default:
+        setError('Forma de pagamento inválida.');
+        return;
+}
 
         const supplierInfo: SupplierInfo = {
             name: supplierName,
