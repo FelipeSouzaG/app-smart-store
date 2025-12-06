@@ -7,7 +7,6 @@ import { AuthContext } from '../contexts/AuthContext';
 interface CashProps {
     transactions: CashTransaction[];
     updateTransactionStatus: (transactionId: string, status: TransactionStatus) => void;
-    // We now receive the full update function to handle Date saving
     updateTransaction: (transaction: CashTransaction) => void;
 }
 
@@ -20,16 +19,13 @@ const StatusBadge: React.FC<{ status: TransactionStatus }> = ({ status }) => {
     return <span className={`${baseClasses} ${statusClasses[status]}`}>{status}</span>;
 };
 
-// Helper to prevent timezone issues (Store/Read as UTC Noon)
 const createDateAsUTC = (dateString: string) => {
     const [year, month, day] = dateString.split('-').map(Number);
-    // Create Date at 12:00:00 UTC to ensure it falls on correct calendar day despite TZ
     return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
 };
 
 const formatDateUTC = (dateString: Date | string) => {
     if (!dateString) return '-';
-    // Display using UTC timezone to match the stored strategy
     return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 };
 
@@ -86,7 +82,6 @@ const PaymentDateModal: React.FC<{
     );
 };
 
-// Augmented Interface for Virtual Transactions (Invoices)
 interface VirtualInvoice extends CashTransaction {
     isInvoice: true;
     financialAccountId: string;
@@ -96,7 +91,6 @@ interface VirtualInvoice extends CashTransaction {
 const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, updateTransaction }) => {
     const { apiCall } = useContext(AuthContext);
     
-    // State for Modal
     const [transactionToPay, setTransactionToPay] = useState<string | null>(null);
     const [invoiceToPay, setInvoiceToPay] = useState<VirtualInvoice | null>(null);
     const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
@@ -109,7 +103,6 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
         fetchAccounts();
     }, [apiCall]);
 
-    // ... existing logic ...
     const getCurrentCompetency = () => {
         const now = new Date();
         const year = now.getFullYear();
@@ -123,89 +116,85 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
     const [currentPage, setCurrentPage] = useState(1);
     const recordsPerPage = 15;
 
-    // ... existing useMemos ...
     const handleCompetencyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setCompetency(e.target.value);
     };
 
-    // --- AGGREGATION LOGIC ---
-    // 1. Identify transactions that belong to a Credit Card (Method type 'Credit')
-    // 2. Group them by Account + Method + DueDate
-    // 3. Create Virtual Transactions
-    // 4. Exclude individual children from the main list
-    
+    // --- AGGREGATION LOGIC (CORRECTED) ---
     const processedTransactions = useMemo(() => {
         if (!competency) return [];
-        const [year, month] = competency.split('-').map(Number);
+        const [compYear, compMonth] = competency.split('-').map(Number);
         
         // Helper to check if a transaction is credit card based
         const getCreditCardInfo = (t: CashTransaction) => {
+            // Must have accounts loaded to decide
+            if (accounts.length === 0) return null;
             if (!t.financialAccountId || !t.paymentMethodId || t.financialAccountId === 'cash-box') return null;
+            
             const acc = accounts.find(a => a.id === t.financialAccountId);
             if (!acc) return null;
+            
             const method = acc.paymentMethods.find(m => m.id === t.paymentMethodId);
             if (method && method.type === 'Credit') return { acc, method };
+            
             return null;
         };
 
         const normalTransactions: CashTransaction[] = [];
-        // Map to store invoice aggregation. Key: AccountID_MethodID_DueDate
         const invoicesMap: { [key: string]: VirtualInvoice } = {};
 
-        // Single pass through transactions
         transactions.forEach(t => {
-            // First, determine if it's a Credit Card Transaction
             const ccInfo = getCreditCardInfo(t);
 
-            if (ccInfo && t.dueDate) {
-                // IT IS A CREDIT CARD ITEM
-                // Logic: Does this item belong to the *current competency's invoice*?
-                // For invoices, we care about the DUE DATE falling in the selected competency month.
+            if (ccInfo) {
+                // --- IT IS A CREDIT CARD ITEM ---
+                // CRITICAL: Credit card items NEVER appear as individual lines in Cash Flow based on purchase date.
+                // They ONLY appear as part of an Invoice Aggregate based on DUE DATE.
                 
-                const tDueDate = new Date(t.dueDate);
-                const isDueThisMonth = tDueDate.getUTCFullYear() === year && (tDueDate.getUTCMonth() + 1) === month;
+                if (t.dueDate) {
+                    const tDueDate = new Date(t.dueDate);
+                    const isDueThisMonth = tDueDate.getUTCFullYear() === compYear && (tDueDate.getUTCMonth() + 1) === compMonth;
 
-                if (isDueThisMonth) {
-                    const dueIso = tDueDate.toISOString().split('T')[0];
-                    const key = `${t.financialAccountId}_${t.paymentMethodId}_${dueIso}`;
+                    if (isDueThisMonth) {
+                        const dueIso = tDueDate.toISOString().split('T')[0];
+                        const key = `${t.financialAccountId}_${t.paymentMethodId}_${dueIso}`;
 
-                    if (!invoicesMap[key]) {
-                        invoicesMap[key] = {
-                            id: `INV_${key}`,
-                            description: `Fatura ${ccInfo.method.name}`,
-                            category: TransactionCategory.OTHER, // Placeholder
-                            amount: 0,
-                            type: TransactionType.EXPENSE,
-                            status: TransactionStatus.PAID, // Optimistic start
-                            timestamp: tDueDate, // Use Due Date for sorting in the list
-                            dueDate: tDueDate,
-                            paymentDate: undefined,
-                            isInvoice: true,
-                            financialAccountId: t.financialAccountId!,
-                            paymentMethodId: t.paymentMethodId!
-                        };
-                    }
+                        if (!invoicesMap[key]) {
+                            invoicesMap[key] = {
+                                id: `INV_${key}`,
+                                description: `Fatura ${ccInfo.method.name}`,
+                                category: TransactionCategory.OTHER, 
+                                amount: 0,
+                                type: TransactionType.EXPENSE,
+                                status: TransactionStatus.PAID, // Start optimistic
+                                timestamp: tDueDate, // Use Due Date for sorting
+                                dueDate: tDueDate,
+                                paymentDate: undefined,
+                                isInvoice: true,
+                                financialAccountId: t.financialAccountId!,
+                                paymentMethodId: t.paymentMethodId!
+                            };
+                        }
 
-                    // Aggregate
-                    invoicesMap[key].amount += t.amount;
-                    
-                    // If any item is pending, invoice is pending
-                    if (t.status === TransactionStatus.PENDING) {
-                        invoicesMap[key].status = TransactionStatus.PENDING;
-                        invoicesMap[key].paymentDate = undefined;
-                    } else if (invoicesMap[key].status === TransactionStatus.PAID && !invoicesMap[key].paymentDate && t.paymentDate) {
-                        // If invoice looks paid so far, grab payment date from child
-                        invoicesMap[key].paymentDate = new Date(t.paymentDate);
+                        // Sum amount (negative for expense visualization later)
+                        invoicesMap[key].amount += t.amount;
+                        
+                        // If any item in the invoice is pending, the whole invoice is pending
+                        if (t.status === TransactionStatus.PENDING) {
+                            invoicesMap[key].status = TransactionStatus.PENDING;
+                            invoicesMap[key].paymentDate = undefined;
+                        } else if (invoicesMap[key].status === TransactionStatus.PAID && !invoicesMap[key].paymentDate && t.paymentDate) {
+                            invoicesMap[key].paymentDate = new Date(t.paymentDate);
+                        }
                     }
                 }
-                // If it is a CC item but NOT due this month, we simply ignore it for this view.
-                // It will appear in the competency corresponding to its due date.
-
+                // If CC item but NOT due this month, ignore completely for this view.
+                
             } else {
-                // IT IS A NORMAL TRANSACTION (Cash, Debit, Pix, etc)
-                // Logic: Uses standard timestamp (Launch Date) for competency
+                // --- IT IS A NORMAL TRANSACTION (Cash, Debit, Pix, etc) ---
+                // Standard Logic: Uses Timestamp (Launch Date) for competency match
                 const transactionDate = new Date(t.timestamp);
-                const isLaunchThisMonth = transactionDate.getFullYear() === year && (transactionDate.getMonth() + 1) === month;
+                const isLaunchThisMonth = transactionDate.getFullYear() === compYear && (transactionDate.getMonth() + 1) === compMonth;
                 
                 if (isLaunchThisMonth) {
                     normalTransactions.push(t);
@@ -215,7 +204,7 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
 
         const virtualInvoices = Object.values(invoicesMap);
         
-        // Return both normal items + invoices
+        // Return combined list
         return [...normalTransactions, ...virtualInvoices];
 
     }, [transactions, competency, accounts]);
@@ -233,20 +222,13 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
     }, [processedTransactions, statusFilter, typeFilter]);
     
     const summary = useMemo(() => {
-        // ... existing summary logic needs to be adapted to use PROCESSED transactions to account for invoices ...
         if (!competency) return { balance: 0, openingBalance: 0, income: 0, serviceRevenue: 0, salesRevenue: 0, expense: 0, fixedCosts: 0, variableCosts: 0 };
         
-        // Note: For strict accounting, opening balance should use all historical raw transactions.
-        // But for the current month view, we use the virtual invoices.
-        // This is a complex mix. For simplicity in this view, we calculate totals based on the DISPLAYED (virtual) list for the current month
-        // and RAW list for previous history.
-
         const [year, month] = competency.split('-').map(Number);
         const competencyStartDate = new Date(year, month - 1, 1);
 
-        // History: Use RAW transactions
+        // Previous Balance (Approximate logic for now)
         const previousTransactions = transactions.filter(t => new Date(t.timestamp) < competencyStartDate);
-        
         const openingBalance = previousTransactions.reduce((balance, t) => {
             if (t.status === TransactionStatus.PAID) {
                  return balance + (t.type === 'income' ? t.amount : -t.amount);
@@ -254,31 +236,24 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
             return balance;
         }, 0);
 
-        // Current Month: Use VIRTUAL list to match display
+        // Current Month Stats (Using VIRTUAL list to match display)
         const paidTransactionsThisMonth = processedTransactions.filter(t => t.status === TransactionStatus.PAID);
         
         const incomeTransactions = paidTransactionsThisMonth.filter(t => t.type === TransactionType.INCOME);
-        const serviceRevenue = incomeTransactions.filter(t => t.category === TransactionCategory.SERVICE_REVENUE).reduce((sum, t) => sum + t.amount, 0);
-        const salesRevenue = incomeTransactions.filter(t => t.category === TransactionCategory.SALES_REVENUE).reduce((sum, t) => sum + t.amount, 0);
         const totalIncome = incomeTransactions.reduce((sum, t) => sum + t.amount, 0);
 
         const expenseTransactions = paidTransactionsThisMonth.filter(t => t.type === TransactionType.EXPENSE);
-        // Categories check needs to be loose because Invoice category is dynamic
         const totalExpense = expenseTransactions.reduce((sum, t) => sum + t.amount, 0);
-        
-        // Simplified classification for summary card since invoices obscure categories
-        const fixedCosts = 0; // Hard to classify invoice as purely fixed/variable
-        const variableCosts = 0;
         
         return {
             balance: openingBalance + totalIncome - totalExpense,
             openingBalance,
             income: totalIncome,
-            serviceRevenue,
-            salesRevenue,
+            serviceRevenue: 0, 
+            salesRevenue: 0,
             expense: totalExpense,
-            fixedCosts,
-            variableCosts,
+            fixedCosts: 0,
+            variableCosts: 0,
         };
     }, [transactions, processedTransactions, competency]);
 
@@ -291,14 +266,9 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
     const currentRecords = filteredTransactions.slice(indexOfFirstRecord, indexOfLastRecord);
     const nPages = Math.ceil(filteredTransactions.length / recordsPerPage);
 
-    const nextPage = () => {
-        if (currentPage < nPages) setCurrentPage(currentPage + 1);
-    };
-    const prevPage = () => {
-        if (currentPage > 1) setCurrentPage(currentPage - 1);
-    };
+    const nextPage = () => { if (currentPage < nPages) setCurrentPage(currentPage + 1); };
+    const prevPage = () => { if (currentPage > 1) setCurrentPage(currentPage - 1); };
     
-    // NEW: Handle Payment Logic
     const handleInitiatePayment = (t: CashTransaction | VirtualInvoice) => {
         if ((t as VirtualInvoice).isInvoice) {
             setInvoiceToPay(t as VirtualInvoice);
@@ -308,19 +278,16 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
     };
 
     const handleConfirmPayment = async (date: string) => {
-        // Create UTC Date at Noon for safe storage
         const safeDate = createDateAsUTC(date);
 
         if (invoiceToPay) {
-            // Batch Pay via API
             try {
                 await apiCall('transactions/pay-invoice', 'POST', {
                     financialAccountId: invoiceToPay.financialAccountId,
                     paymentMethodId: invoiceToPay.paymentMethodId,
-                    dueDate: invoiceToPay.dueDate, // The invoice key
+                    dueDate: invoiceToPay.dueDate, 
                     paymentDate: safeDate
                 });
-                // Force Reload to reflect changes in specific items
                 window.location.reload(); 
             } catch (e) {
                 console.error(e);
@@ -344,14 +311,13 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
 
     const handleRevertToPending = async (transaction: CashTransaction | VirtualInvoice) => {
         if ((transaction as VirtualInvoice).isInvoice) {
-            alert("Para reabrir uma fatura, edite os itens individuais na aba Financeiro > Banco > Faturas.");
+            alert("Para reabrir uma fatura, edite as transações individuais no menu Financeiro > Banco > Extrato.");
             return;
         }
 
         const updated = {
             ...transaction,
             status: TransactionStatus.PENDING,
-            // Explicitly set paymentDate to undefined/null when reverting
             paymentDate: undefined as any
         };
         updateTransaction(updated);
@@ -359,7 +325,6 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
 
     return (
         <div className="container mx-auto">
-            {/* Payment Modal */}
             <PaymentDateModal 
                 isOpen={!!transactionToPay || !!invoiceToPay} 
                 onClose={() => { setTransactionToPay(null); setInvoiceToPay(null); }} 
@@ -440,12 +405,10 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
                                 </tr>
                             ) : (
                                 currentRecords.map(t => {
-                                    // Use UTC time to ensure day comparison is accurate
                                     const today = new Date().setHours(0,0,0,0);
                                     const dueDateObj = t.dueDate ? new Date(t.dueDate) : null;
                                     const paymentDateObj = t.paymentDate ? new Date(t.paymentDate) : null;
 
-                                    // Overdue calculation
                                     const isLate = t.status === TransactionStatus.PENDING && dueDateObj && dueDateObj.getTime() < today;
                                     const isPaidLate = t.status === TransactionStatus.PAID && paymentDateObj && dueDateObj && paymentDateObj.getTime() > dueDateObj.getTime();
                                     
@@ -463,12 +426,10 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
                                         </td>
                                         <td className="px-6 py-4"><StatusBadge status={t.status} /></td>
                                         
-                                        {/* Reference Date: Launch Date for Normal, Due Date for Invoice */}
                                         <td className="px-6 py-4">
                                             {isInvoice ? '-' : formatDateUTC(t.timestamp)}
                                         </td>
                                         
-                                        {/* Due Date with Overdue Logic */}
                                         <td className="px-6 py-4">
                                             {t.dueDate ? (
                                                 <div className={isLate ? "text-red-500 font-bold" : ""}>
@@ -478,7 +439,6 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
                                             ) : '-'}
                                         </td>
 
-                                        {/* Payment Date */}
                                         <td className={`px-6 py-4 font-medium ${isPaidLate ? "text-red-500 font-bold" : "text-green-600"}`}>
                                             {t.status === TransactionStatus.PAID && t.paymentDate 
                                                 ? (
