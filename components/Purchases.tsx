@@ -791,6 +791,252 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                 </form>
             </div>
         </div>
+    )
+};
+
+const ConfirmationModal: React.FC<{ message: string; onConfirm: () => void; onCancel: () => void }> = ({ message, onConfirm, onCancel }) => (
+    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
+        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm">
+            <h3 className="text-lg font-bold mb-4">Confirmar Ação</h3>
+            <p className="mb-6">{message}</p>
+            <div className="flex justify-end space-x-4">
+                <button onClick={onCancel} className="px-4 py-2 rounded-md bg-gray-300 dark:bg-gray-600 hover:bg-gray-400">Cancelar</button>
+                <button onClick={onConfirm} className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700">Confirmar</button>
+            </div>
+        </div>
+    </div>
+);
+
+interface PurchasesProps {
+    products: Product[];
+    purchaseOrders: PurchaseOrder[];
+    onAddPurchase: (purchase: Omit<PurchaseOrder, 'id' | 'createdAt'>) => void;
+    onUpdatePurchase: (purchase: PurchaseOrder) => void;
+    onDeletePurchase: (purchaseId: string) => void;
+}
+
+const Purchases: React.FC<PurchasesProps> = ({ products, purchaseOrders, onAddPurchase, onUpdatePurchase, onDeletePurchase }) => {
+    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [editingPurchase, setEditingPurchase] = useState<PurchaseOrder | null>(null);
+    const [deletingPurchaseId, setDeletingPurchaseId] = useState<string | null>(null);
+    const [searchTerm, setSearchTerm] = useState('');
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [currentPage, setCurrentPage] = useState(1);
+    const recordsPerPage = 15;
+
+
+    const handleOpenCreateModal = () => {
+        setEditingPurchase(null);
+        setIsModalOpen(true);
+    };
+
+    const handleOpenEditModal = (purchase: PurchaseOrder) => {
+        setEditingPurchase(purchase);
+        setIsModalOpen(true);
+    };
+
+    const handleCloseModal = () => {
+        setEditingPurchase(null);
+        setIsModalOpen(false);
+    };
+
+    const handleSave = (purchaseData: Omit<PurchaseOrder, 'id' | 'createdAt'> | PurchaseOrder) => {
+        if ('id' in purchaseData) {
+            onUpdatePurchase(purchaseData);
+        } else {
+            onAddPurchase(purchaseData);
+        }
+        handleCloseModal();
+    };
+    
+    const handleDeleteRequest = (purchaseId: string) => {
+        setDeletingPurchaseId(purchaseId);
+    };
+
+    const handleDeleteConfirm = () => {
+        if (deletingPurchaseId) {
+            onDeletePurchase(deletingPurchaseId);
+        }
+        setDeletingPurchaseId(null);
+    };
+
+    const filteredAndSortedPurchases = useMemo(() => {
+        return purchaseOrders
+            .filter(po => {
+                const poDate = new Date(po.createdAt);
+                
+                if (startDate) {
+                    const start = new Date(startDate);
+                    start.setHours(0, 0, 0, 0); // Beginning of the day
+                    if (poDate < start) return false;
+                }
+                
+                if (endDate) {
+                    const end = new Date(endDate);
+                    end.setHours(23, 59, 59, 999); // End of the day
+                    if (poDate > end) return false;
+                }
+                
+                const lowerCaseSearchTerm = searchTerm.toLowerCase();
+                if (lowerCaseSearchTerm) {
+                    const matchesSupplier = po.supplierInfo?.name.toLowerCase().includes(lowerCaseSearchTerm);
+                    const matchesReference = po.reference?.toLowerCase().includes(lowerCaseSearchTerm);
+                    const matchesTotal = po.totalCost.toFixed(2).includes(lowerCaseSearchTerm);
+                    return matchesSupplier || matchesReference || matchesTotal;
+                }
+                
+                return true;
+            })
+            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }, [purchaseOrders, searchTerm, startDate, endDate]);
+
+    const indexOfLastRecord = currentPage * recordsPerPage;
+    const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
+    const currentRecords = filteredAndSortedPurchases.slice(indexOfFirstRecord, indexOfLastRecord);
+    const nPages = Math.ceil(filteredAndSortedPurchases.length / recordsPerPage);
+
+    const nextPage = () => {
+        if (currentPage < nPages) setCurrentPage(currentPage + 1);
+    };
+    const prevPage = () => {
+        if (currentPage > 1) setCurrentPage(currentPage - 1);
+    };
+
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [searchTerm, startDate, endDate]);
+
+
+    return (
+        <div className="container mx-auto">
+            {isModalOpen && <PurchaseModal 
+                products={products}
+                purchaseToEdit={editingPurchase}
+                onClose={handleCloseModal}
+                onSave={handleSave} 
+            />}
+
+            {deletingPurchaseId && (
+                <ConfirmationModal 
+                    message="Tem certeza que deseja excluir esta compra? Esta ação irá reverter o estoque e remover as transações financeiras associadas."
+                    onConfirm={handleDeleteConfirm}
+                    onCancel={() => setDeletingPurchaseId(null)}
+                />
+            )}
+
+            <div className="flex justify-between items-center mb-6">
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Compras</h1>
+                <button onClick={handleOpenCreateModal} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Incluir Compra</button>
+            </div>
+            
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg mb-6 flex flex-wrap items-end gap-4">
+                <div className="flex-grow min-w-[200px]">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Buscar</label>
+                    <input
+                        type="text"
+                        placeholder="Fornecedor, Referência, Valor..."
+                        value={searchTerm}
+                        onChange={(e) => setSearchTerm(e.target.value)}
+                        className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Data Inicial</label>
+                    <input
+                        type="date"
+                        value={startDate}
+                        onChange={(e) => setStartDate(e.target.value)}
+                        className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
+                    />
+                </div>
+                <div>
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Data Final</label>
+                    <input
+                        type="date"
+                        value={endDate}
+                        onChange={(e) => setEndDate(e.target.value)}
+                        className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
+                    />
+                </div>
+            </div>
+
+            <div className="bg-white dark:bg-gray-800 shadow-lg rounded-xl overflow-hidden">
+                <div className="overflow-x-auto">
+                    <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                        <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
+                            <tr>
+                                <th scope="col" className="px-6 py-3">ID</th>
+                                <th scope="col" className="px-6 py-3">Data</th>
+                                <th scope="col" className="px-6 py-3">Fornecedor</th>
+                                <th scope="col" className="px-6 py-3">Referência</th>
+                                <th scope="col" className="px-6 py-3">Itens</th>
+                                <th scope="col" className="px-6 py-3">Custo Total</th>
+                                <th scope="col" className="px-6 py-3">Forma de Pagamento</th>
+                                <th scope="col" className="px-6 py-3">Ações</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                             {filteredAndSortedPurchases.length === 0 ? (
+                                <tr>
+                                    <td colSpan={8} className="text-center py-8 text-gray-500">
+                                        {purchaseOrders.length === 0 ? "Nenhuma compra registrada." : "Nenhum resultado encontrado para os filtros aplicados."}
+                                    </td>
+                                </tr>
+                            ) : (
+                                currentRecords.map(po => (
+                                <tr key={po.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
+                                    <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{po.id}</td>
+                                    <td className="px-6 py-4">{new Date(po.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
+                                    <td className="px-6 py-4">{po.supplierInfo?.name || 'N/A'}</td>
+                                    <td className="px-6 py-4">{po.reference || 'N/A'}</td>
+                                    <td className="px-6 py-4">{po.items.length}</td>
+                                    <td className="px-6 py-4">R$ {formatCurrencyNumber(po.totalCost)}</td>
+                                    <td className="px-6 py-4">
+                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                            (po.paymentDetails as any).financialAccountId 
+                                            ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300'
+                                            : po.paymentDetails.method === PaymentMethod.BANK_SLIP 
+                                                ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' 
+                                                : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
+                                        }`}>
+                                            {(po.paymentDetails as any).financialAccountId ? 'Financeiro' : po.paymentDetails.method}
+                                        </span>
+                                    </td>
+                                     <td className="px-6 py-4 whitespace-nowrap">
+                                        <button onClick={() => handleOpenEditModal(po)} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline mr-4">Editar</button>
+                                        <button onClick={() => handleDeleteRequest(po.id)} className="font-medium text-red-600 dark:text-red-500 hover:underline">Excluir</button>
+                                    </td>
+                                </tr>
+                            )))}
+                        </tbody>
+                    </table>
+                </div>
+                 {nPages > 1 && (
+                    <div className="p-4 flex justify-between items-center flex-wrap gap-2">
+                         <span className="text-sm text-gray-700 dark:text-gray-400">
+                            Página {currentPage} de {nPages} ({filteredAndSortedPurchases.length} registros)
+                        </span>
+                        <div className="flex space-x-2">
+                            <button
+                                onClick={prevPage}
+                                disabled={currentPage === 1}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                            >
+                                Anterior
+                            </button>
+                            <button
+                                onClick={nextPage}
+                                disabled={currentPage === nPages || nPages === 0}
+                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
+                            >
+                                Próximo
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+        </div>
     );
 };
 
