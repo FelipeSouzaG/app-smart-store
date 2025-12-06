@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useContext, useRef } from 'react';
-import { Product, PurchaseOrder, PurchaseItem, PaymentMethod, Bank, Installment, PaymentDetails, SupplierInfo, Supplier } from '../types';
+import { Product, PurchaseOrder, PurchaseItem, PaymentMethod, Bank, Installment, PaymentDetails, SupplierInfo, Supplier, FinancialAccount, TransactionStatus } from '../types';
 import { AuthContext } from '../contexts/AuthContext';
 import { formatName, validateName, formatRegister, validateRegister, formatPhone, validatePhone, formatCurrencyNumber, formatMoney } from '../validation';
 
@@ -120,13 +120,33 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
     const [foundSupplier, setFoundSupplier] = useState<Supplier | null>(null);
 
 
-    // Payment State
-    const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.BANK_SLIP);
-    const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
-    const [bank, setBank] = useState<Bank>(Bank.ITAU);
-    const [customBank, setCustomBank] = useState(''); // State for custom bank name
+    // Payment State (Updated for Financial Accounts)
+    const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PENDING);
+    const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]); // For Cash/Paid
+    const [dueDate, setDueDate] = useState(''); // For Pending/Boleto
+    
+    // Financial Account Selection
+    const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+    const [selectedAccountId, setSelectedAccountId] = useState('');
+    const [selectedMethodId, setSelectedMethodId] = useState('');
     const [installmentsCount, setInstallmentsCount] = useState(1);
+    
+    // Legacy support for manual bank slip dates
     const [installments, setInstallments] = useState<Installment[]>([]);
+
+    useEffect(() => {
+        const fetchAccounts = async () => {
+            const data = await apiCall('financial', 'GET');
+            if (data) setAccounts(data);
+        };
+        fetchAccounts();
+    }, [apiCall]);
+
+    // Derived Financial Logic
+    const isCashBox = selectedAccountId === 'cash-box';
+    const selectedAccount = useMemo(() => accounts.find(a => a.id === selectedAccountId), [accounts, selectedAccountId]);
+    const selectedMethod = useMemo(() => selectedAccount?.paymentMethods.find(m => (m.id || (m as any)._id) === selectedMethodId), [selectedAccount, selectedMethodId]);
+    const isCreditCard = !isCashBox && selectedMethod?.type === 'Credit';
 
     const handleCurrencyChange = (value: string, setter: React.Dispatch<React.SetStateAction<string>>) => {
         setter(formatMoney(value));
@@ -154,40 +174,26 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             setReference(purchaseToEdit.reference || '');
 
             const pd = purchaseToEdit.paymentDetails;
-            setPaymentMethod(pd.method);
-
-            // Populate Bank for relevant methods
-            if (
-                pd.method === PaymentMethod.CREDIT_CARD || 
-                pd.method === PaymentMethod.BANK_TRANSFER || 
-                pd.method === PaymentMethod.DEBIT_CARD || 
-                pd.method === PaymentMethod.PIX ||
-                pd.method === PaymentMethod.BANK_SLIP
-            ) {
-                // Check if the saved bank is a standard Enum value
-                // BANK_SLIP also needs bank populated now
-                const savedBank = (pd as any).bank; // Use 'as any' because type might mismatch during migration or legacy data check
-                
-                if (savedBank) {
-                    const isStandard = Object.values(Bank).includes(savedBank as Bank);
-                    if (isStandard && savedBank !== Bank.OTHER) {
-                        setBank(savedBank as Bank);
-                        setCustomBank('');
-                    } else {
-                        setBank(Bank.OTHER);
-                        setCustomBank(savedBank === Bank.OTHER ? '' : savedBank);
-                    }
-                } else {
-                    setBank(Bank.ITAU);
-                    setCustomBank('');
-                }
+            
+            // Populate financial details if available (New structure)
+            if ((pd as any).financialAccountId) {
+                setSelectedAccountId((pd as any).financialAccountId);
+                setSelectedMethodId((pd as any).paymentMethodId || '');
+                if ((pd as any).installments) setInstallmentsCount((pd as any).installments.length || 1);
+            } else {
+                // Fallback for legacy data visualization
+                setSelectedAccountId('');
+                setSelectedMethodId('');
             }
 
-            if (pd.method === PaymentMethod.BANK_SLIP) {
-                setInstallments(pd.installments.map(i => ({...i, dueDate: new Date(i.dueDate)})));
-                setInstallmentsCount(pd.installments.length);
-            } else {
+            if ('paymentDate' in pd && pd.paymentDate) {
                 setPaymentDate(new Date(pd.paymentDate).toISOString().split('T')[0]);
+                setStatus(TransactionStatus.PAID);
+            } else if (pd.method === PaymentMethod.BANK_SLIP) {
+                setStatus(TransactionStatus.PENDING);
+                setInstallments(pd.installments.map(i => ({...i, dueDate: new Date(i.dueDate)})));
+                // Assume first installment due date for general viewing
+                if(pd.installments[0]) setDueDate(new Date(pd.installments[0].dueDate).toISOString().split('T')[0]);
             }
         } else {
             setItems([]);
@@ -203,12 +209,13 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             setSupplierContactPerson('');
             setSupplierPhone('');
             setReference('');
-            setPaymentMethod(PaymentMethod.BANK_SLIP);
+            
+            setStatus(TransactionStatus.PENDING);
+            setSelectedAccountId('');
+            setSelectedMethodId('');
             setInstallmentsCount(1);
             setInstallments([]);
             setFoundSupplier(null);
-            setBank(Bank.ITAU);
-            setCustomBank('');
         }
          setValidationErrors({});
     }, [purchaseToEdit]);
@@ -235,8 +242,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                     setSupplierPhone(supplier.phone);
                     setValidationErrors({});
                 } else {
-                    // If no supplier is found, don't clear fields to allow for new supplier entry.
-                    // Just reset the found status. This prevents overwriting manual input.
                     setFoundSupplier(null);
                 }
                 setIsSupplierLoading(false);
@@ -247,24 +252,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
 
         return () => clearTimeout(handler);
     }, [supplierCnpjCpf, apiCall]);
-
-    useEffect(() => {
-        if (paymentMethod !== PaymentMethod.BANK_SLIP) return;
-    
-        const updatedInstallments = Array.from({ length: installmentsCount }, (_, i) => {
-            const installmentNumber = i + 1;
-            const amount = totalCost > 0 && installmentsCount > 0 ? totalCost / installmentsCount : 0;
-            
-            const existingInstallment = installments[i];
-            const dueDate = existingInstallment?.dueDate 
-                ? new Date(existingInstallment.dueDate)
-                : new Date(new Date().setMonth(new Date().getMonth() + i));
-
-            return { installmentNumber, amount, dueDate };
-        });
-        
-        setInstallments(updatedInstallments);
-    }, [totalCost, installmentsCount, paymentMethod]);
 
     const handleSupplierNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = e.target.value;
@@ -308,7 +295,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
         });
     };
 
-    // Validate Phone on Blur to prevent duplicates with different CNPJ
     const handlePhoneBlur = async () => {
         const cleanPhone = supplierPhone.replace(/\D/g, '');
         const cleanCurrentCnpj = supplierCnpjCpf.replace(/\D/g, '');
@@ -321,14 +307,12 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             if (existingSupplier) {
                 const dbCnpj = existingSupplier.cnpjCpf.replace(/\D/g, '');
                 
-                // If phone exists but belongs to a supplier with a different CNPJ
                 if (dbCnpj !== cleanCurrentCnpj) {
                     setValidationErrors(prev => ({
                         ...prev,
                         phone: `Telefone já pertence a: ${existingSupplier.name} (CNPJ: ${formatRegister(existingSupplier.cnpjCpf)})`
                     }));
                 } else {
-                    // Phone exists but belongs to same CNPJ (correct, or new record with matching data)
                     setValidationErrors(prev => {
                         const newErr = {...prev};
                         delete newErr.phone;
@@ -365,8 +349,8 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
 
     const handleSelectProduct = (product: Product) => {
         setSelectedProduct(product);
-        setSearchTerm(product.name); // Show the name in the input
-        setSearchResults([]); // Hide the results
+        setSearchTerm(product.name);
+        setSearchResults([]); 
         searchInputRef.current?.focus();
     };
 
@@ -392,7 +376,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
         setError('');
         
         let productToAdd = selectedProduct;
-        // Allow direct barcode entry without selection
         if (!productToAdd) {
             const foundByBarcode = products.find(p => p.barcode === searchTerm);
             if (foundByBarcode) {
@@ -428,7 +411,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             setItems([...items, newItem]);
         }
         
-        // Reset fields
         setSearchTerm('');
         setSelectedProduct(null);
         setSearchResults([]);
@@ -460,13 +442,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             setEditingItemIndex(null);
         }
     };
-
-
-    const handleInstallmentDateChange = (index: number, dateString: string) => {
-        const updatedInstallments = [...installments];
-        updatedInstallments[index].dueDate = new Date(`${dateString}T12:00:00`);
-        setInstallments(updatedInstallments);
-    };
     
     const isSaveDisabled = Object.keys(validationErrors).length > 0 || items.length === 0 || !supplierName || !supplierCnpjCpf || !supplierPhone || !reference || isValidatingPhone;
     
@@ -474,7 +449,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
         e.preventDefault();
         setError('');
 
-        // Re-validate on submit just in case
         const currentErrors: { name?: string; cnpjCpf?: string; phone?: string } = {};
         if (!validateName(supplierName)) currentErrors.name = 'Nome inválido.';
         if (!validateRegister(supplierCnpjCpf)) currentErrors.cnpjCpf = 'CPF/CNPJ inválido.';
@@ -491,43 +465,59 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             return;
         }
 
-        let paymentDetails: PaymentDetails;
-
-        // Determine final bank value (Enum or Custom String)
-        const finalBank = bank === Bank.OTHER ? (customBank ? customBank : Bank.OTHER) : bank;
-
-        switch(paymentMethod) {
-            case PaymentMethod.CASH:
-                paymentDetails = { method: paymentMethod, paymentDate: new Date(`${paymentDate}T12:00:00`) };
-                break;
-            case PaymentMethod.PIX:
-            case PaymentMethod.CREDIT_CARD:
-            case PaymentMethod.BANK_TRANSFER:
-            case PaymentMethod.DEBIT_CARD:
-                if (bank === Bank.OTHER && !customBank) {
-                    setError('Por favor, especifique o nome do banco/instituição.');
-                    return;
-                }
-                paymentDetails = { method: paymentMethod, bank: finalBank as Bank, paymentDate: new Date(`${paymentDate}T12:00:00`) };
-                break;
-            case PaymentMethod.BANK_SLIP:
-                if (bank === Bank.OTHER && !customBank) {
-                    setError('Por favor, especifique o nome do banco/instituição emissora do boleto.');
-                    return;
-                }
-                if (installments.some(inst => !inst.dueDate)) {
-                    setError('Por favor, preencha todas as datas de vencimento das parcelas.');
-                    return;
-                }
-                paymentDetails = { 
-                    method: PaymentMethod.BANK_SLIP, 
-                    installments,
-                    bank: finalBank as Bank
-                };
-                break;
-            default:
-                setError('Forma de pagamento inválida.');
+        // --- PAYMENT VALIDATION ---
+        
+        // 1. Status Paid
+        if (status === TransactionStatus.PAID) {
+            if (!selectedAccountId) {
+                setError('Selecione a Conta de Saída (Dinheiro ou Banco).');
                 return;
+            }
+            if (!isCashBox && !selectedMethodId) {
+                setError('Selecione o Método de Pagamento do Banco.');
+                return;
+            }
+            if (!isCreditCard && !paymentDate) {
+                setError('Data do Pagamento é obrigatória.');
+                return;
+            }
+        } 
+        
+        // 2. Status Pending
+        if (status === TransactionStatus.PENDING) {
+            if (!dueDate) {
+                setError('Data de Vencimento é obrigatória para pendências.');
+                return;
+            }
+        }
+
+        // Construct Payment Details Object to match backend expectations
+        let paymentDetails: any = {
+            financialAccountId: selectedAccountId,
+            paymentMethodId: selectedMethodId,
+            installments: isCreditCard ? installmentsCount : 1
+        };
+
+        if (isCashBox) {
+            paymentDetails.method = PaymentMethod.CASH;
+            paymentDetails.paymentDate = status === TransactionStatus.PAID ? new Date(`${paymentDate}T12:00:00`) : undefined;
+        } else if (isCreditCard) {
+            paymentDetails.method = PaymentMethod.CREDIT_CARD;
+            // Dates are handled by backend transaction generator for CC
+        } else {
+            // General Bank Payment
+            paymentDetails.method = selectedMethod?.type === 'Pix' ? PaymentMethod.PIX : PaymentMethod.BANK_TRANSFER; // Approximate mapping
+            if (status === TransactionStatus.PAID) {
+                paymentDetails.paymentDate = new Date(`${paymentDate}T12:00:00`);
+            } else {
+                paymentDetails.method = PaymentMethod.BANK_SLIP; // Force logic for pending bank items if needed, or backend handles it
+                // Logic: Pending + Bank Account = Bank Slip / Payable
+                paymentDetails.installments = [{
+                    installmentNumber: 1,
+                    amount: totalCost,
+                    dueDate: new Date(`${dueDate}T12:00:00`)
+                }];
+            }
         }
 
         const supplierInfo: SupplierInfo = {
@@ -545,98 +535,16 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             paymentDetails,
             supplierInfo,
             reference,
+            // Pass flat status/dates for backend utility
+            status: isCreditCard ? TransactionStatus.PENDING : status,
+            paymentDate: (!isCreditCard && status === TransactionStatus.PAID) ? paymentDate : undefined,
+            dueDate: (!isCreditCard && status === TransactionStatus.PENDING) ? dueDate : undefined
         };
         
         if (purchaseToEdit) {
-            onSave({
-                ...purchaseToEdit,
-                ...purchaseData,
-            });
+            onSave({ ...purchaseToEdit, ...purchaseData });
         } else {
             onSave(purchaseData);
-        }
-    }
-
-
-    const renderPaymentFields = () => {
-        switch(paymentMethod) {
-            case PaymentMethod.CASH:
-                return (
-                    <div>
-                        <label className="block text-sm">Data do Pagamento</label>
-                        <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="mt-1 w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm p-2"/>
-                    </div>
-                );
-            case PaymentMethod.PIX:
-            case PaymentMethod.DEBIT_CARD:
-            case PaymentMethod.CREDIT_CARD:
-            case PaymentMethod.BANK_TRANSFER:
-            case PaymentMethod.BANK_SLIP:
-                return (
-                    <>
-                        <div className={paymentMethod === PaymentMethod.BANK_SLIP ? "md:col-span-2 lg:col-span-2" : ""}>
-                            <label className="block text-sm">Banco / Instituição</label>
-                             <select value={bank} onChange={e => setBank(e.target.value as Bank)} className="mt-1 w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm p-2">
-                                {Object.values(Bank).map(b => <option key={b} value={b}>{b}</option>)}
-                            </select>
-                        </div>
-                        
-                        {bank === Bank.OTHER && (
-                            <div className={`animate-fade-in ${paymentMethod === PaymentMethod.BANK_SLIP ? "md:col-span-2 lg:col-span-2" : ""}`}>
-                                <label className="block text-sm text-indigo-600 dark:text-indigo-400">Especifique o Banco</label>
-                                <input 
-                                    type="text" 
-                                    value={customBank} 
-                                    onChange={e => setCustomBank(e.target.value)} 
-                                    placeholder="Ex: Nubank, C6..."
-                                    className="mt-1 w-full rounded-md bg-indigo-50 dark:bg-gray-700 border-indigo-300 dark:border-indigo-500 shadow-sm p-2"
-                                />
-                            </div>
-                        )}
-
-                        {paymentMethod === PaymentMethod.BANK_SLIP ? (
-                            <div className="md:col-span-2 lg:col-span-4">
-                                <label className="block text-sm">Nº de Parcelas</label>
-                                <select value={installmentsCount} onChange={e => setInstallmentsCount(parseInt(e.target.value, 10))} className="mt-1 w-full md:w-1/4 rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm p-2">
-                                    {Array.from({ length: 10 }, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}x</option>)}
-                                </select>
-                                
-                                {installments.length > 0 && (
-                                    <div className="mt-4 max-h-32 overflow-y-auto">
-                                        <table className="w-full text-sm">
-                                            <thead className="text-left text-gray-500 dark:text-gray-400">
-                                                <tr><th className="py-1">Parcela</th><th className="py-1">Valor</th><th className="py-1">Vencimento</th></tr>
-                                            </thead>
-                                            <tbody>
-                                            {installments.map((inst, index) => (
-                                                <tr key={inst.installmentNumber}>
-                                                    <td className="py-1">{inst.installmentNumber}</td>
-                                                    <td className="py-1">R$ {formatCurrencyNumber(inst.amount)}</td>
-                                                    <td className="py-1">
-                                                        <input 
-                                                            type="date" 
-                                                            value={inst.dueDate.toISOString().split('T')[0]}
-                                                            onChange={(e) => handleInstallmentDateChange(index, e.target.value)}
-                                                            className="rounded-md bg-white dark:bg-gray-600 border-gray-300 shadow-sm p-1 text-xs"
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                            </tbody>
-                                        </table>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            <div>
-                                <label className="block text-sm">Data do Pagamento</label>
-                                <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="mt-1 w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm p-2"/>
-                            </div>
-                        )}
-                    </>
-                );
-            default:
-                return null;
         }
     }
 
@@ -751,10 +659,15 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                         </div>
                     </div>
 
-                    {/* Costs and Payment */}
+                    {/* Costs and Payment (NEW: Financial Account Logic) */}
                     <div className="pt-4 border-t dark:border-gray-600">
-                        <h3 className="font-semibold mb-2">Custos Adicionais e Pagamento</h3>
-                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="flex justify-between items-center mb-2">
+                            <h3 className="font-semibold">Custos Adicionais e Pagamento</h3>
+                            <div className="text-right font-bold text-lg text-green-600 dark:text-green-400">
+                                Total: R$ {formatCurrencyNumber(totalCost)}
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-4">
                             <div>
                                 <label className="block text-sm">Frete (R$)</label>
                                 <input type="text" value={freightCost} onChange={e => handleCurrencyChange(e.target.value, setFreightCost)} className="mt-1 w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm p-2"/>
@@ -763,269 +676,119 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                                 <label className="block text-sm">Outros Custos (R$)</label>
                                 <input type="text" value={otherCost} onChange={e => handleCurrencyChange(e.target.value, setOtherCost)} className="mt-1 w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm p-2"/>
                             </div>
-                            <div className="md:col-span-2">
-                                <label className="block text-sm">Forma de Pagamento</label>
-                                <select value={paymentMethod} onChange={e => setPaymentMethod(e.target.value as PaymentMethod)} className="mt-1 w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm p-2">
-                                    {Object.values(PaymentMethod).map(method => <option key={method} value={method}>{method}</option>)}
-                                </select>
+                        </div>
+
+                        {/* Financial Account Selection (Similar to CostModal) */}
+                        <div className="bg-gray-50 dark:bg-gray-700 p-4 rounded-lg border border-gray-200 dark:border-gray-600">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                <div>
+                                    <label className="block text-sm font-medium mb-1">Status do Pagamento</label>
+                                    <select 
+                                        value={status} 
+                                        onChange={(e) => {
+                                            setStatus(e.target.value as TransactionStatus);
+                                            if (e.target.value === TransactionStatus.PENDING) {
+                                                setSelectedAccountId('');
+                                                setSelectedMethodId('');
+                                            }
+                                        }} 
+                                        className="w-full rounded-md bg-white dark:bg-gray-600 border-gray-300 shadow-sm p-2 font-bold"
+                                    >
+                                        <option value={TransactionStatus.PENDING}>🔴 Pendente (A Pagar)</option>
+                                        <option value={TransactionStatus.PAID}>🟢 Pago (Realizado)</option>
+                                    </select>
+                                </div>
                             </div>
-                             {renderPaymentFields()}
+
+                            {status === TransactionStatus.PAID && (
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 animate-fade-in">
+                                    <div>
+                                        <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Conta de Origem</label>
+                                        <select 
+                                            value={selectedAccountId} 
+                                            onChange={(e) => { setSelectedAccountId(e.target.value); setSelectedMethodId(''); }} 
+                                            className="w-full rounded-md bg-white dark:bg-gray-600 border-gray-300 shadow-sm p-2"
+                                        >
+                                            <option value="">Selecione...</option>
+                                            <option value="cash-box">💵 Dinheiro do Caixa</option>
+                                            <optgroup label="Bancos">
+                                                {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName}</option>)}
+                                            </optgroup>
+                                        </select>
+                                    </div>
+
+                                    {!isCashBox && selectedAccountId && (
+                                        <div>
+                                            <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Método de Pagto</label>
+                                            <select 
+                                                value={selectedMethodId} 
+                                                onChange={e => setSelectedMethodId(e.target.value)} 
+                                                className="w-full rounded-md bg-white dark:bg-gray-600 border-gray-300 shadow-sm p-2"
+                                            >
+                                                <option value="">Selecione...</option>
+                                                {selectedAccount?.paymentMethods.map(m => (
+                                                    <option key={m.id || (m as any)._id} value={m.id || (m as any)._id}>
+                                                        {m.name} ({m.type})
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+
+                            {/* Credit Card Specifics */}
+                            {isCreditCard && (
+                                <div className="mt-4 p-3 bg-indigo-50 dark:bg-gray-800 rounded border border-indigo-200 animate-fade-in">
+                                    <div className="flex justify-between items-center">
+                                        <label className="text-sm font-bold text-indigo-600">Parcelamento no Cartão</label>
+                                        <select 
+                                            value={installmentsCount} 
+                                            onChange={e => setInstallmentsCount(parseInt(e.target.value))}
+                                            className="text-sm rounded p-1 border border-indigo-300"
+                                        >
+                                            {Array.from({length: 12}, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}x</option>)}
+                                        </select>
+                                    </div>
+                                    <p className="text-xs text-gray-500 mt-1">As parcelas serão geradas automaticamente na fatura do cartão.</p>
+                                </div>
+                            )}
+
+                            {/* Date Fields */}
+                            <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                                {status === TransactionStatus.PENDING && (
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1 text-yellow-600">Vencimento</label>
+                                        <input 
+                                            type="date" 
+                                            value={dueDate} 
+                                            onChange={e => setDueDate(e.target.value)} 
+                                            className="w-full rounded-md bg-white dark:bg-gray-600 border-yellow-300 shadow-sm p-2"
+                                        />
+                                    </div>
+                                )}
+                                {status === TransactionStatus.PAID && !isCreditCard && (
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1 text-green-600">Data do Pagamento</label>
+                                        <input 
+                                            type="date" 
+                                            value={paymentDate} 
+                                            onChange={e => setPaymentDate(e.target.value)} 
+                                            className="w-full rounded-md bg-white dark:bg-gray-600 border-green-300 shadow-sm p-2"
+                                        />
+                                    </div>
+                                )}
+                            </div>
                         </div>
                     </div>
-                     <div className="text-right font-bold text-xl mt-4">
-                        Total da Nota: R$ {formatCurrencyNumber(totalCost)}
-                    </div>
-                    {error && <p className="text-red-500 text-sm text-center mt-2">{error}</p>}
+                    
+                    {error && <p className="text-red-500 text-sm text-center mt-2 font-bold">{error}</p>}
 
                     <div className="flex justify-end space-x-4 pt-4">
                         <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-gray-300">Cancelar</button>
                         <button type="submit" disabled={isSaveDisabled} className="px-6 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed">Salvar Compra</button>
                     </div>
                 </form>
-            </div>
-        </div>
-    )
-};
-
-const ConfirmationModal: React.FC<{ message: string; onConfirm: () => void; onCancel: () => void }> = ({ message, onConfirm, onCancel }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
-        <div className="bg-white dark:bg-gray-800 p-6 rounded-lg shadow-xl w-full max-w-sm">
-            <h3 className="text-lg font-bold mb-4">Confirmar Ação</h3>
-            <p className="mb-6">{message}</p>
-            <div className="flex justify-end space-x-4">
-                <button onClick={onCancel} className="px-4 py-2 rounded-md bg-gray-300 dark:bg-gray-600 hover:bg-gray-400">Cancelar</button>
-                <button onClick={onConfirm} className="px-4 py-2 rounded-md bg-red-600 text-white hover:bg-red-700">Confirmar</button>
-            </div>
-        </div>
-    </div>
-);
-
-interface PurchasesProps {
-    products: Product[];
-    purchaseOrders: PurchaseOrder[];
-    onAddPurchase: (purchase: Omit<PurchaseOrder, 'id' | 'createdAt'>) => void;
-    onUpdatePurchase: (purchase: PurchaseOrder) => void;
-    onDeletePurchase: (purchaseId: string) => void;
-}
-
-const Purchases: React.FC<PurchasesProps> = ({ products, purchaseOrders, onAddPurchase, onUpdatePurchase, onDeletePurchase }) => {
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingPurchase, setEditingPurchase] = useState<PurchaseOrder | null>(null);
-    const [deletingPurchaseId, setDeletingPurchaseId] = useState<string | null>(null);
-    const [searchTerm, setSearchTerm] = useState('');
-    const [startDate, setStartDate] = useState('');
-    const [endDate, setEndDate] = useState('');
-    const [currentPage, setCurrentPage] = useState(1);
-    const recordsPerPage = 15;
-
-
-    const handleOpenCreateModal = () => {
-        setEditingPurchase(null);
-        setIsModalOpen(true);
-    };
-
-    const handleOpenEditModal = (purchase: PurchaseOrder) => {
-        setEditingPurchase(purchase);
-        setIsModalOpen(true);
-    };
-
-    const handleCloseModal = () => {
-        setEditingPurchase(null);
-        setIsModalOpen(false);
-    };
-
-    const handleSave = (purchaseData: Omit<PurchaseOrder, 'id' | 'createdAt'> | PurchaseOrder) => {
-        if ('id' in purchaseData) {
-            onUpdatePurchase(purchaseData);
-        } else {
-            onAddPurchase(purchaseData);
-        }
-        handleCloseModal();
-    };
-    
-    const handleDeleteRequest = (purchaseId: string) => {
-        setDeletingPurchaseId(purchaseId);
-    };
-
-    const handleDeleteConfirm = () => {
-        if (deletingPurchaseId) {
-            onDeletePurchase(deletingPurchaseId);
-        }
-        setDeletingPurchaseId(null);
-    };
-
-    const filteredAndSortedPurchases = useMemo(() => {
-        return purchaseOrders
-            .filter(po => {
-                const poDate = new Date(po.createdAt);
-                
-                if (startDate) {
-                    const start = new Date(startDate);
-                    start.setHours(0, 0, 0, 0); // Beginning of the day
-                    if (poDate < start) return false;
-                }
-                
-                if (endDate) {
-                    const end = new Date(endDate);
-                    end.setHours(23, 59, 59, 999); // End of the day
-                    if (poDate > end) return false;
-                }
-                
-                const lowerCaseSearchTerm = searchTerm.toLowerCase();
-                if (lowerCaseSearchTerm) {
-                    const matchesSupplier = po.supplierInfo?.name.toLowerCase().includes(lowerCaseSearchTerm);
-                    const matchesReference = po.reference?.toLowerCase().includes(lowerCaseSearchTerm);
-                    const matchesTotal = po.totalCost.toFixed(2).includes(lowerCaseSearchTerm);
-                    return matchesSupplier || matchesReference || matchesTotal;
-                }
-                
-                return true;
-            })
-            .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-    }, [purchaseOrders, searchTerm, startDate, endDate]);
-
-    const indexOfLastRecord = currentPage * recordsPerPage;
-    const indexOfFirstRecord = indexOfLastRecord - recordsPerPage;
-    const currentRecords = filteredAndSortedPurchases.slice(indexOfFirstRecord, indexOfLastRecord);
-    const nPages = Math.ceil(filteredAndSortedPurchases.length / recordsPerPage);
-
-    const nextPage = () => {
-        if (currentPage < nPages) setCurrentPage(currentPage + 1);
-    };
-    const prevPage = () => {
-        if (currentPage > 1) setCurrentPage(currentPage - 1);
-    };
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchTerm, startDate, endDate]);
-
-
-    return (
-        <div className="container mx-auto">
-            {isModalOpen && <PurchaseModal 
-                products={products}
-                purchaseToEdit={editingPurchase}
-                onClose={handleCloseModal}
-                onSave={handleSave} 
-            />}
-
-            {deletingPurchaseId && (
-                <ConfirmationModal 
-                    message="Tem certeza que deseja excluir esta compra? Esta ação irá reverter o estoque e remover as transações financeiras associadas."
-                    onConfirm={handleDeleteConfirm}
-                    onCancel={() => setDeletingPurchaseId(null)}
-                />
-            )}
-
-            <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Compras</h1>
-                <button onClick={handleOpenCreateModal} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Incluir Compra</button>
-            </div>
-            
-            <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg mb-6 flex flex-wrap items-end gap-4">
-                <div className="flex-grow min-w-[200px]">
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Buscar</label>
-                    <input
-                        type="text"
-                        placeholder="Fornecedor, Referência, Valor..."
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Data Inicial</label>
-                    <input
-                        type="date"
-                        value={startDate}
-                        onChange={(e) => setStartDate(e.target.value)}
-                        className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
-                    />
-                </div>
-                <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">Data Final</label>
-                    <input
-                        type="date"
-                        value={endDate}
-                        onChange={(e) => setEndDate(e.target.value)}
-                        className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 px-3 py-2"
-                    />
-                </div>
-            </div>
-
-            <div className="bg-white dark:bg-gray-800 shadow-lg rounded-xl overflow-hidden">
-                <div className="overflow-x-auto">
-                    <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
-                        <thead className="text-xs text-gray-700 uppercase bg-gray-50 dark:bg-gray-700 dark:text-gray-400">
-                            <tr>
-                                <th scope="col" className="px-6 py-3">ID</th>
-                                <th scope="col" className="px-6 py-3">Data</th>
-                                <th scope="col" className="px-6 py-3">Fornecedor</th>
-                                <th scope="col" className="px-6 py-3">Referência</th>
-                                <th scope="col" className="px-6 py-3">Itens</th>
-                                <th scope="col" className="px-6 py-3">Custo Total</th>
-                                <th scope="col" className="px-6 py-3">Forma de Pagamento</th>
-                                <th scope="col" className="px-6 py-3">Ações</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                             {filteredAndSortedPurchases.length === 0 ? (
-                                <tr>
-                                    <td colSpan={8} className="text-center py-8 text-gray-500">
-                                        {purchaseOrders.length === 0 ? "Nenhuma compra registrada." : "Nenhum resultado encontrado para os filtros aplicados."}
-                                    </td>
-                                </tr>
-                            ) : (
-                                currentRecords.map(po => (
-                                <tr key={po.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                    <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{po.id}</td>
-                                    <td className="px-6 py-4">{new Date(po.createdAt).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' })}</td>
-                                    <td className="px-6 py-4">{po.supplierInfo?.name || 'N/A'}</td>
-                                    <td className="px-6 py-4">{po.reference || 'N/A'}</td>
-                                    <td className="px-6 py-4">{po.items.length}</td>
-                                    <td className="px-6 py-4">R$ {formatCurrencyNumber(po.totalCost)}</td>
-                                    <td className="px-6 py-4">
-                                        <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                            po.paymentDetails.method === PaymentMethod.BANK_SLIP 
-                                            ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' 
-                                            : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
-                                        }`}>
-                                            {po.paymentDetails.method}
-                                        </span>
-                                    </td>
-                                     <td className="px-6 py-4 whitespace-nowrap">
-                                        <button onClick={() => handleOpenEditModal(po)} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline mr-4">Editar</button>
-                                        <button onClick={() => handleDeleteRequest(po.id)} className="font-medium text-red-600 dark:text-red-500 hover:underline">Excluir</button>
-                                    </td>
-                                </tr>
-                            )))}
-                        </tbody>
-                    </table>
-                </div>
-                 {nPages > 1 && (
-                    <div className="p-4 flex justify-between items-center flex-wrap gap-2">
-                         <span className="text-sm text-gray-700 dark:text-gray-400">
-                            Página {currentPage} de {nPages} ({filteredAndSortedPurchases.length} registros)
-                        </span>
-                        <div className="flex space-x-2">
-                            <button
-                                onClick={prevPage}
-                                disabled={currentPage === 1}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-                            >
-                                Anterior
-                            </button>
-                            <button
-                                onClick={nextPage}
-                                disabled={currentPage === nPages || nPages === 0}
-                                className="px-4 py-2 text-sm font-medium text-gray-700 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed dark:bg-gray-800 dark:border-gray-600 dark:text-gray-300 dark:hover:bg-gray-700"
-                            >
-                                Próximo
-                            </button>
-                        </div>
-                    </div>
-                )}
             </div>
         </div>
     );
