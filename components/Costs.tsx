@@ -106,34 +106,49 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
         setError('');
     }, [costToEdit]);
 
-    // Calculate Estimated Due Date for Credit Card UI feedback
-    const creditCardEstimate = useMemo(() => {
-        if (isCreditCard && selectedMethod && selectedMethod.closingDay && selectedMethod.dueDay) {
+    // Calculate Estimated Due Dates for Credit Card Table
+    const creditCardPreview = useMemo(() => {
+        if (isCreditCard && selectedMethod && selectedMethod.closingDay && selectedMethod.dueDay && amount) {
             const pDate = new Date(purchaseDate);
             // Fix timezone offset for day calculation
             const pDay = parseInt(purchaseDate.split('-')[2]); 
             
-            let targetMonth = pDate.getMonth();
-            let targetYear = pDate.getFullYear();
+            let startMonth = pDate.getMonth();
+            let startYear = pDate.getFullYear();
 
             // If bought ON or AFTER closing day, bill goes to NEXT month
             if (pDay >= selectedMethod.closingDay) {
-                targetMonth += 1;
-                if (targetMonth > 11) {
-                    targetMonth = 0;
-                    targetYear += 1;
-                }
+                startMonth += 1;
+                // Year rollover handled in loop logic below
             }
             
-            // Determine Due Date
-            const estDate = new Date(targetYear, targetMonth, selectedMethod.dueDay);
-            const estDateStr = estDate.toLocaleDateString('pt-BR');
-            const amountVal = parseCurrency(amount);
-            const instVal = installments > 0 ? amountVal / installments : amountVal;
+            const totalVal = parseCurrency(amount);
+            const installmentVal = installments > 0 ? totalVal / installments : totalVal;
+            const previews = [];
 
-            return { date: estDateStr, value: formatCurrencyNumber(instVal) };
+            for (let i = 0; i < installments; i++) {
+                let targetMonth = startMonth + i;
+                let targetYear = startYear;
+
+                // Adjust for year rollover
+                while (targetMonth > 11) {
+                    targetMonth -= 12;
+                    targetYear += 1;
+                }
+
+                // Create date object
+                const estDate = new Date(targetYear, targetMonth, selectedMethod.dueDay);
+                
+                previews.push({
+                    number: i + 1,
+                    date: estDate.toLocaleDateString('pt-BR'),
+                    amount: installmentVal
+                });
+            }
+
+            return previews;
         }
-        return null;
+        return [];
     }, [isCreditCard, selectedMethod, purchaseDate, amount, installments]);
 
     const handleSubmit = (e: React.FormEvent) => {
@@ -325,8 +340,8 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                             {/* SUB-SCENARIO 2B: Credit Card Logic */}
                             {isCreditCard && (
                                 <div className="p-3 bg-white dark:bg-gray-800 rounded border border-indigo-200 dark:border-indigo-800 shadow-sm animate-fade-in">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <label className="text-sm font-bold text-indigo-600 dark:text-indigo-400">Parcelamento</label>
+                                    <div className="flex justify-between items-center mb-3">
+                                        <label className="text-sm font-bold text-indigo-600 dark:text-indigo-400">Parcelamento no Cartão</label>
                                         <select 
                                             value={installments} 
                                             onChange={e => setInstallments(parseInt(e.target.value))}
@@ -337,15 +352,32 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                                             ))}
                                         </select>
                                     </div>
-                                    {creditCardEstimate && (
-                                        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-                                            <p>💳 <strong>1ª Parcela:</strong> R$ {creditCardEstimate.value}</p>
-                                            <p>📅 <strong>1º Vencimento:</strong> {creditCardEstimate.date}</p>
-                                            <p className="text-orange-500 font-medium mt-1">
-                                                ⚠ Serão geradas {installments} contas "Pendente" (Contas a Pagar) para cada vencimento da fatura.
-                                            </p>
+                                    
+                                    {creditCardPreview.length > 0 && (
+                                        <div className="max-h-32 overflow-y-auto border-t border-gray-100 dark:border-gray-700 pt-2">
+                                            <table className="w-full text-xs">
+                                                <thead className="text-gray-500 dark:text-gray-400 text-left">
+                                                    <tr>
+                                                        <th className="py-1">Parc.</th>
+                                                        <th className="py-1">Vencimento</th>
+                                                        <th className="py-1 text-right">Valor</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {creditCardPreview.map((item) => (
+                                                        <tr key={item.number} className="border-b border-gray-50 dark:border-gray-700 last:border-0">
+                                                            <td className="py-1 font-medium">{item.number}x</td>
+                                                            <td className="py-1 text-gray-600 dark:text-gray-300">{item.date}</td>
+                                                            <td className="py-1 text-right font-medium">R$ {formatCurrencyNumber(item.amount)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
                                         </div>
                                     )}
+                                    <p className="text-[10px] text-orange-500 font-medium mt-2 text-center">
+                                        ⚠ Serão geradas {installments} contas "Pendente" para cada vencimento.
+                                    </p>
                                 </div>
                             )}
 
