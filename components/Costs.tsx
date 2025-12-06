@@ -18,6 +18,41 @@ interface CostModalProps {
     onSave: (transaction: any) => void; 
 }
 
+// Internal Notification Modal
+const NotificationModal: React.FC<{ isOpen: boolean; type: 'success' | 'error'; message: string; onClose: () => void }> = ({ isOpen, type, message, onClose }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[80] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl p-6 max-w-sm w-full transform transition-all scale-100">
+                <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4 ${type === 'success' ? 'bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400'}`}>
+                    {type === 'success' ? (
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                    ) : (
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    )}
+                </div>
+                <h3 className={`text-lg leading-6 font-bold text-center mb-2 ${type === 'success' ? 'text-gray-900 dark:text-white' : 'text-gray-900 dark:text-white'}`}>
+                    {type === 'success' ? 'Sucesso!' : 'Atenção'}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-300 text-center mb-6">
+                    {message}
+                </p>
+                <button
+                    onClick={onClose}
+                    className={`w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 sm:text-sm transition-colors ${type === 'success' ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500' : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'}`}
+                >
+                    Entendi
+                </button>
+            </div>
+        </div>
+    );
+};
+
 // Date helpers
 const createDateAsUTC = (dateString: string) => {
     const [year, month, day] = dateString.split('-').map(Number);
@@ -35,10 +70,12 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     const [category, setCategory] = useState<TransactionCategory>(TransactionCategory.OTHER);
     const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PENDING);
     
+    const today = new Date().toISOString().split('T')[0];
+
     // Dates
-    const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]); // Data da Compra (Competência)
-    const [dueDate, setDueDate] = useState(''); // Vencimento
-    const [paymentDate, setPaymentDate] = useState(''); // Pagamento (Caixa)
+    const [purchaseDate, setPurchaseDate] = useState(today); // Data da Compra (Competência)
+    const [dueDate, setDueDate] = useState(today); // Vencimento
+    const [paymentDate, setPaymentDate] = useState(today); // Pagamento (Caixa)
     
     // Financial Config
     const [selectedAccountId, setSelectedAccountId] = useState('');
@@ -46,6 +83,9 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     const [installments, setInstallments] = useState(1);
     
     const [error, setError] = useState('');
+    const [notification, setNotification] = useState<{isOpen: boolean; type: 'success' | 'error'; message: string}>({
+        isOpen: false, type: 'error', message: ''
+    });
 
     const allowedCategories = useMemo(() => Object.values(TransactionCategory).filter(cat =>
         ![
@@ -73,6 +113,19 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
         return parseFloat(numericString) || 0;
     };
 
+    const handlePaymentDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newDate = e.target.value;
+        if (newDate > today) {
+            setNotification({
+                isOpen: true,
+                type: 'error',
+                message: 'Data de pagamento não pode ser futura. Para agendamentos, utilize o status "Pendente" com a data de vencimento desejada.'
+            });
+            return;
+        }
+        setPaymentDate(newDate);
+    };
+
     useEffect(() => {
         if (costToEdit) {
             setDescription(costToEdit.description);
@@ -80,7 +133,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             setCategory(costToEdit.category);
             setStatus(costToEdit.status);
             
-            setPurchaseDate(costToEdit.timestamp ? new Date(costToEdit.timestamp).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
+            setPurchaseDate(costToEdit.timestamp ? new Date(costToEdit.timestamp).toISOString().split('T')[0] : today);
             setDueDate(costToEdit.dueDate ? new Date(costToEdit.dueDate).toISOString().split('T')[0] : '');
             setPaymentDate(costToEdit.paymentDate ? new Date(costToEdit.paymentDate).toISOString().split('T')[0] : '');
             
@@ -92,14 +145,14 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                 setSelectedMethodId(costToEdit.paymentMethodId || '');
             }
         } else {
-            // Defaults
+            // Defaults for New Cost
             setDescription('');
             setAmount('');
             setCategory(TransactionCategory.OTHER);
             setStatus(TransactionStatus.PENDING);
-            setPurchaseDate(new Date().toISOString().split('T')[0]);
-            setDueDate('');
-            setPaymentDate(new Date().toISOString().split('T')[0]); 
+            setPurchaseDate(today);
+            setDueDate(today);
+            setPaymentDate(today); 
             setSelectedAccountId('');
             setSelectedMethodId('');
             setInstallments(1);
@@ -152,6 +205,12 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             if (!isCreditCard) {
                 if (!dueDate) { setError('Data de Vencimento é obrigatória.'); return; }
                 if (!paymentDate) { setError('Data de Pagamento é obrigatória.'); return; }
+                
+                // Double check future date on submit (redundant but safe)
+                if (paymentDate > today) {
+                    setNotification({ isOpen: true, type: 'error', message: 'Data de pagamento futura não permitida.' });
+                    return;
+                }
             }
         }
 
@@ -167,7 +226,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             amount: numericAmount,
             type: TransactionType.EXPENSE,
             category,
-            // FORCE PENDING if Credit Card, otherwise use selected status
+            // FORCE PENDING if Credit Card (to be managed in invoice), otherwise use selected status
             status: isCreditCard ? TransactionStatus.PENDING : status, 
             timestamp: createDateAsUTC(purchaseDate), // Competence
             financialAccountId: selectedAccountId || undefined,
@@ -178,7 +237,8 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
         // --- DATE LOGIC --- //
         
         if (isCreditCard) {
-            // Backend handles due date calculation. Payment date is null until bill is paid.
+            // Backend handles due date calculation based on billing cycle. 
+            // Payment date is null until bill is paid.
             transactionPayload.dueDate = null; 
             transactionPayload.paymentDate = null;
         } else {
@@ -203,6 +263,13 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <NotificationModal 
+                isOpen={notification.isOpen} 
+                type={notification.type} 
+                message={notification.message} 
+                onClose={() => setNotification({ ...notification, isOpen: false })} 
+            />
+
             <div className="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -233,7 +300,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
 
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium mb-1">Data da Compra</label>
+                            <label className="block text-sm font-medium mb-1">Data do Custo</label>
                             <input 
                                 type="date" 
                                 value={purchaseDate} 
@@ -329,7 +396,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                                     </div>
                                     <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
                                         <p>📅 <strong>Vencimento da Fatura:</strong> {creditCardEstimate || 'Calculando...'}</p>
-                                        <p className="text-orange-500 font-medium">⚠ Status será "Pendente" até o pagamento da fatura.</p>
+                                        <p className="text-orange-500 font-medium">⚠ O custo será registrado no cartão e o status ficará vinculado à fatura.</p>
                                     </div>
                                 </div>
                             )}
@@ -351,7 +418,8 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                                         <input 
                                             type="date" 
                                             value={paymentDate} 
-                                            onChange={e => setPaymentDate(e.target.value)} 
+                                            onChange={handlePaymentDateChange} 
+                                            max={today}
                                             className="w-full rounded-lg bg-white dark:bg-gray-800 border-green-300 dark:border-green-600 p-2.5 ring-1 ring-green-100"
                                         />
                                     </div>
@@ -437,8 +505,9 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
         if (competency) {
             const [year, month] = competency.split('-').map(Number);
             result = result.filter(t => {
-                const transactionDate = new Date(t.timestamp);
-                return transactionDate.getFullYear() === year && transactionDate.getMonth() + 1 === month;
+                // Determine which date to use for filtering. For invoices, use dueDate (billing date).
+                const refDate = t.dueDate ? new Date(t.dueDate) : new Date(t.timestamp);
+                return refDate.getUTCFullYear() === year && (refDate.getUTCMonth() + 1) === month;
             });
         }
 
@@ -544,23 +613,33 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                     const today = new Date().setHours(0,0,0,0);
                                     const dueDateObj = t.dueDate ? new Date(t.dueDate) : null;
                                     const paymentDateObj = t.paymentDate ? new Date(t.paymentDate) : null;
+                                    const isInvoice = (t as any).isInvoice;
                                     
                                     const isLatePending = t.status === TransactionStatus.PENDING && dueDateObj && dueDateObj.getTime() < today;
                                     const isPaidLate = t.status === TransactionStatus.PAID && paymentDateObj && dueDateObj && paymentDateObj.getTime() > dueDateObj.getTime();
 
                                     return (
                                     <tr key={t.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
-                                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">{t.description}</td>
+                                        <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
+                                            {isInvoice && <span className="mr-2">💳</span>}
+                                            {t.description}
+                                        </td>
                                         <td className="px-6 py-4">{t.category}</td>
                                         <td className={`px-6 py-4 font-semibold text-red-500`}>
                                             - R$ {formatCurrencyNumber(t.amount)}
                                         </td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                                t.status === TransactionStatus.PAID 
-                                                ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
-                                                : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
-                                            }`}>{t.status}</span>
+                                            {isInvoice ? (
+                                                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                                                    Fatura Cartão
+                                                </span>
+                                            ) : (
+                                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                                    t.status === TransactionStatus.PAID 
+                                                    ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                                                    : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
+                                                }`}>{t.status}</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">{formatDateUTC(t.timestamp)}</td>
                                         
@@ -583,8 +662,13 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                         </td>
 
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <button onClick={() => { setEditingCost(t); setIsModalOpen(true); }} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline mr-4">Editar</button>
-                                            <button onClick={() => setDeletingCostId(t.id)} className="font-medium text-red-600 dark:text-red-500 hover:underline">Excluir</button>
+                                            {!isInvoice && (
+                                                <>
+                                                    <button onClick={() => { setEditingCost(t); setIsModalOpen(true); }} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline mr-4">Editar</button>
+                                                    <button onClick={() => setDeletingCostId(t.id)} className="font-medium text-red-600 dark:text-red-500 hover:underline">Excluir</button>
+                                                </>
+                                            )}
+                                            {isInvoice && <span className="text-xs text-gray-400">Gerenciado via Fatura</span>}
                                         </td>
                                     </tr>
                                     );
