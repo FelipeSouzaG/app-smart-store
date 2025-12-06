@@ -18,9 +18,9 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PENDING);
     
     // Dates
-    const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]); 
-    const [dueDate, setDueDate] = useState(''); 
-    const [paymentDate, setPaymentDate] = useState(''); 
+    const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]); // Data da Compra
+    const [dueDate, setDueDate] = useState(''); // Vencimento (Boleto ou Fatura)
+    const [paymentDate, setPaymentDate] = useState(''); // Pagamento (Caixa)
     
     // Financial Config
     const [selectedAccountId, setSelectedAccountId] = useState('');
@@ -29,6 +29,9 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     
     const [error, setError] = useState('');
     const [isSaving, setIsSaving] = useState(false);
+
+    // Get today's date for max attribute
+    const today = new Date().toISOString().split('T')[0];
 
     const allowedCategories = Object.values(TransactionCategory).filter(c => 
         c !== TransactionCategory.SALES_REVENUE && c !== TransactionCategory.SERVICE_REVENUE
@@ -90,9 +93,10 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
         const dueDay = selectedMethod.dueDay || 10;
         
         const previews = [];
-        const installmentValue = numAmount / installments;
-        
         const purchase = new Date(purchaseDate);
+        const installmentValue = numAmount / installments;
+
+        // Logic to determine first due date
         const purchaseDay = purchase.getUTCDate();
         let targetMonth = purchase.getUTCMonth();
         let targetYear = purchase.getUTCFullYear();
@@ -133,18 +137,16 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
 
         if (status === TransactionStatus.PAID) {
             if (!selectedAccountId) {
-                setError('Selecione a conta de origem.');
+                setError('Selecione a conta de origem para pagamentos realizados.');
                 return;
             }
             if (!isCashBox && !selectedMethodId) {
                 setError('Selecione o método de pagamento.');
                 return;
             }
-            if (!isCreditCard) {
-                if (!paymentDate) {
-                    setError('Data do pagamento é obrigatória.');
-                    return;
-                }
+            if (!isCreditCard && !paymentDate) {
+                setError('Data do pagamento é obrigatória.');
+                return;
             }
         }
 
@@ -169,8 +171,9 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                 
                 if (isCreditCard) {
                     payload.installments = installments;
+                    // Due dates handled by backend for Credit Card
                 } else {
-                    payload.dueDate = dueDate || paymentDate;
+                    payload.dueDate = dueDate || paymentDate; // Default to payment date if no due date set
                     payload.paymentDate = paymentDate;
                 }
             }
@@ -355,6 +358,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                                             type="date" 
                                             value={paymentDate} 
                                             onChange={e => setPaymentDate(e.target.value)} 
+                                            max={today}
                                             className="w-full rounded-lg bg-white dark:bg-gray-800 border-green-300 dark:border-green-600 p-2.5 ring-1 ring-green-100"
                                         />
                                     </div>
@@ -379,8 +383,8 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
 
 interface CostsProps {
     transactions: CashTransaction[];
-    addTransaction: (transaction: any) => Promise<void>;
-    updateTransaction: (transaction: CashTransaction) => Promise<void>;
+    addTransaction: (t: any) => Promise<void>;
+    updateTransaction: (t: any) => Promise<void>;
     deleteTransaction: (id: string) => Promise<void>;
 }
 
@@ -428,15 +432,24 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
     return (
         <div className="container mx-auto">
             {isModalOpen && <CostModal costToEdit={editingCost} accounts={accounts} onClose={() => setIsModalOpen(false)} onSave={handleSave} />}
+            
             <div className="flex justify-between items-center mb-6">
                 <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerenciar Custos</h1>
                 <button onClick={() => { setEditingCost(null); setIsModalOpen(true); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-md">
                     + Novo Custo
                 </button>
             </div>
+
             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg mb-6">
-                <input type="text" placeholder="Buscar por descrição ou categoria..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm px-3 py-2"/>
+                <input
+                    type="text"
+                    placeholder="Buscar por descrição ou categoria..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 shadow-sm px-3 py-2"
+                />
             </div>
+
             <div className="bg-white dark:bg-gray-800 shadow-lg rounded-xl overflow-hidden">
                 <div className="overflow-x-auto">
                     <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
@@ -461,7 +474,9 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                         <td className="px-6 py-4">{cost.category}</td>
                                         <td className="px-6 py-4 font-bold text-red-500">R$ {formatCurrencyNumber(cost.amount)}</td>
                                         <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${cost.status === TransactionStatus.PAID ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{cost.status}</span>
+                                            <span className={`px-2 py-1 rounded-full text-xs font-bold ${cost.status === TransactionStatus.PAID ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>
+                                                {cost.status}
+                                            </span>
                                         </td>
                                         <td className="px-6 py-4">
                                             <button onClick={() => handleEdit(cost)} className="text-indigo-600 hover:underline mr-3">Editar</button>
@@ -477,4 +492,5 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
         </div>
     );
 };
+
 export default Costs;
