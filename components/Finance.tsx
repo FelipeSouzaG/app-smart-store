@@ -30,8 +30,9 @@ const CreditCardStatementModal: React.FC<{
             t.financialAccountId === account.id && 
             t.paymentMethodId === method.id
         ).sort((a, b) => {
-            const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
-            const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+            const dateA = a.dueDate ? new Date(a.dueDate).getTime() : (a.timestamp ? new Date(a.timestamp).getTime() : 0);
+            const dateB = b.dueDate ? new Date(b.dueDate).getTime() : (b.timestamp ? new Date(b.timestamp).getTime() : 0);
+            // Sort by Due Date descending (Future first)
             return dateB - dateA;
         });
     }, [transactions, account, method]);
