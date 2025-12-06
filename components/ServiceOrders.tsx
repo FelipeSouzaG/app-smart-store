@@ -90,7 +90,7 @@ const CostPaymentModal: React.FC<{
     onConfirm: (costDetails: any) => void
 }> = ({ order, accounts, onClose, onConfirm }) => {
     const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PENDING);
-    const [date, setDate] = useState(new Date().toISOString().split('T')[0]); // Due Date or Payment Date
+    const [date, setDate] = useState(new Date().toISOString().split('T')[0]); 
     const [selectedAccountId, setSelectedAccountId] = useState('cash-box');
     const [selectedMethodId, setSelectedMethodId] = useState('');
     const [installments, setInstallments] = useState(1);
@@ -179,16 +179,18 @@ const CostPaymentModal: React.FC<{
                             )}
 
                             {isCreditCard && (
-                                <div>
-                                    <label className="block text-sm font-medium mb-1">Parcelas</label>
+                                <div className="bg-yellow-50 dark:bg-yellow-900/10 p-3 rounded border border-yellow-200 dark:border-yellow-700">
+                                    <label className="block text-sm font-medium mb-1 text-yellow-800 dark:text-yellow-400">Parcelamento</label>
                                     <select 
                                         value={installments} 
                                         onChange={(e) => setInstallments(Number(e.target.value))}
-                                        className="w-full rounded p-2 bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600"
+                                        className="w-full rounded p-2 bg-white dark:bg-gray-800 border-yellow-300 dark:border-yellow-600"
                                     >
                                         {Array.from({length: 12}, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}x</option>)}
                                     </select>
-                                    <p className="text-xs text-orange-500 mt-1">Serão geradas parcelas na fatura deste cartão.</p>
+                                    <p className="text-[10px] text-yellow-700 dark:text-yellow-300 mt-2 font-medium">
+                                        ℹ️ Ao usar crédito, a despesa será lançada na <strong>Fatura do Cartão (Financeiro)</strong> como "Pendente", respeitando a data de fechamento.
+                                    </p>
                                 </div>
                             )}
 
