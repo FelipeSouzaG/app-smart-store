@@ -1,6 +1,6 @@
 
 import React, { useState, useMemo, useEffect, useContext } from 'react';
-import { CashTransaction, TransactionStatus, TransactionType, TransactionCategory, FinancialAccount, PaymentMethodConfig } from '../types';
+import { CashTransaction, TransactionStatus, TransactionType, TransactionCategory, FinancialAccount } from '../types';
 import { formatCurrencyNumber, formatMoney, formatName } from '../validation';
 import { AuthContext } from '../contexts/AuthContext';
 
@@ -18,6 +18,7 @@ interface CostModalProps {
     onSave: (transaction: any) => void; 
 }
 
+// Date helpers
 const createDateAsUTC = (dateString: string) => {
     const [year, month, day] = dateString.split('-').map(Number);
     return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
@@ -35,9 +36,9 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PENDING);
     
     // Dates
-    const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]); // Competence
-    const [dueDate, setDueDate] = useState(''); // Only used for manual non-credit entries
-    const [paymentDate, setPaymentDate] = useState(''); // Cash flow date
+    const [purchaseDate, setPurchaseDate] = useState(new Date().toISOString().split('T')[0]); // Data da Compra
+    const [dueDate, setDueDate] = useState(''); // Vencimento (Boleto ou Fatura)
+    const [paymentDate, setPaymentDate] = useState(''); // Data real do desembolso (Caixa)
     
     // Financial Config
     const [selectedAccountId, setSelectedAccountId] = useState('');
@@ -45,7 +46,6 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     const [installments, setInstallments] = useState(1);
     
     const [error, setError] = useState('');
-    const [dateError, setDateError] = useState('');
 
     const allowedCategories = useMemo(() => Object.values(TransactionCategory).filter(cat =>
         ![
@@ -79,7 +79,6 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             setCategory(costToEdit.category);
             setStatus(costToEdit.status);
             
-            // Dates
             setPurchaseDate(costToEdit.timestamp ? new Date(costToEdit.timestamp).toISOString().split('T')[0] : new Date().toISOString().split('T')[0]);
             setDueDate(costToEdit.dueDate ? new Date(costToEdit.dueDate).toISOString().split('T')[0] : '');
             setPaymentDate(costToEdit.paymentDate ? new Date(costToEdit.paymentDate).toISOString().split('T')[0] : '');
@@ -87,79 +86,102 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             setSelectedAccountId(costToEdit.financialAccountId || '');
             setSelectedMethodId(costToEdit.paymentMethodId || '');
         } else {
+            // Defaults
             setDescription('');
             setAmount('');
             setCategory(TransactionCategory.OTHER);
             setStatus(TransactionStatus.PENDING);
             setPurchaseDate(new Date().toISOString().split('T')[0]);
             setDueDate('');
-            setPaymentDate('');
+            setPaymentDate(new Date().toISOString().split('T')[0]); // Default payment to today if shown
             setSelectedAccountId('');
             setSelectedMethodId('');
             setInstallments(1);
         }
         setError('');
-        setDateError('');
     }, [costToEdit]);
 
-    // Logic: If Credit Card is selected, lock Status to Pending
-    useEffect(() => {
-        if (isCreditCard) {
-            setStatus(TransactionStatus.PENDING);
+    // If Credit Card, we calculate the estimated Due Date for visual feedback
+    const estimatedFirstDueDate = useMemo(() => {
+        if (isCreditCard && selectedMethod && selectedMethod.closingDay && selectedMethod.dueDay) {
+            const pDate = new Date(purchaseDate);
+            const closingDay = selectedMethod.closingDay;
+            const dueDay = selectedMethod.dueDay;
+            
+            // Logic: If purchase day >= closing day, bill goes to next month
+            // Note: Purchase Date is YYYY-MM-DD local, pDate.getDate() gets day
+            // We use simple logic here for preview. The backend has the robust one.
+            let targetMonth = pDate.getMonth();
+            const purchaseDay = parseInt(purchaseDate.split('-')[2]); // robust day extraction
+
+            if (purchaseDay >= closingDay) {
+                targetMonth += 1;
+            }
+            
+            // Construct date: Current Year, Target Month, Due Day
+            const estDate = new Date(pDate.getFullYear(), targetMonth, dueDay);
+            return estDate.toLocaleDateString('pt-BR');
         }
-    }, [isCreditCard]);
+        return '';
+    }, [isCreditCard, selectedMethod, purchaseDate]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const numericAmount = parseCurrency(amount);
         if (numericAmount <= 0) { setError('O valor deve ser um número positivo.'); return; }
         
-        // Validation logic
-        if (!isCreditCard) {
-            // For non-credit cards, Due Date is mandatory
-            if (!dueDate && status === TransactionStatus.PENDING) {
-                setDateError('Data de vencimento é obrigatória para pendências.');
+        // --- VALIDATION LOGIC ---
+        if (status === TransactionStatus.PENDING) {
+            // If Pending, Due Date is mandatory
+            if (!dueDate && !isCreditCard) {
+                setError('Data de vencimento é obrigatória para contas pendentes.');
                 return;
             }
-            if (status === TransactionStatus.PAID && !paymentDate) {
-                // If paid immediately (cash/pix), usually Payment Date = Purchase Date, but let's require it to be explicit or default
-                // If user didn't select, we can default to today, but better to ask.
-                if(!paymentDate) {
-                     setDateError('Data do pagamento é obrigatória.');
-                     return;
-                }
+        }
+
+        if (status === TransactionStatus.PAID) {
+            // If Paid, Payment Method is mandatory
+            if (!selectedMethodId) {
+                setError('Selecione a forma de pagamento utilizada.');
+                return;
+            }
+
+            // If Paid via NON-Credit, Payment Date is mandatory
+            if (!isCreditCard && !paymentDate) {
+                setError('Data do pagamento é obrigatória.');
+                return;
             }
         }
 
         setError('');
-        setDateError('');
 
          const transactionPayload: any = {
             description: formatName(description),
             amount: numericAmount,
             type: TransactionType.EXPENSE,
             category,
-            status, // Will be PENDING if isCreditCard
-            timestamp: createDateAsUTC(purchaseDate), // Competence
+            // LOGIC: If Credit Card, force Pending (Bill to pay). If not, verify status.
+            status: isCreditCard ? TransactionStatus.PENDING : status, 
+            timestamp: createDateAsUTC(purchaseDate), // Competence Date
             financialAccountId: selectedAccountId || undefined,
             paymentMethodId: selectedMethodId || undefined,
             installments: isCreditCard ? installments : 1
         };
 
-        // Date Logic for Payload
+        // Date Logic
         if (isCreditCard) {
-            // Backend handles due dates for credit card
+            // Backend calculates dates based on Closing Day
             transactionPayload.dueDate = null; 
             transactionPayload.paymentDate = null;
         } else {
             // Manual entries
-            if (dueDate) transactionPayload.dueDate = createDateAsUTC(dueDate);
-            if (status === TransactionStatus.PAID) {
-                transactionPayload.paymentDate = paymentDate ? createDateAsUTC(paymentDate) : new Date();
-                // If paid immediately, dueDate is usually same as payment or ignored, but let's keep it clean
-                if (!transactionPayload.dueDate) transactionPayload.dueDate = transactionPayload.paymentDate;
-            } else {
+            if (status === TransactionStatus.PENDING) {
+                transactionPayload.dueDate = createDateAsUTC(dueDate);
                 transactionPayload.paymentDate = null;
+            } else {
+                // PAID (Cash/Pix/Debit)
+                transactionPayload.dueDate = createDateAsUTC(dueDate || paymentDate); // If no due date, assume paid on due date
+                transactionPayload.paymentDate = createDateAsUTC(paymentDate);
             }
         }
 
@@ -173,134 +195,170 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     const isSaveDisabled = !description || !amount || parseCurrency(amount) <= 0;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-lg shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-                <h2 className="text-2xl font-bold mb-6">{costToEdit ? 'Editar Custo' : 'Lançar Custo / Despesa'}</h2>
-                <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
+            <div className="bg-white dark:bg-gray-800 p-6 md:p-8 rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto border border-gray-200 dark:border-gray-700">
+                <div className="flex justify-between items-center mb-6">
+                    <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
+                        {costToEdit ? 'Editar Custo' : 'Novo Custo / Despesa'}
+                    </h2>
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">✕</button>
+                </div>
+
+                <form onSubmit={handleSubmit} className="space-y-5">
+                    {/* Basic Info */}
                     <div>
-                        <label className="block text-sm font-medium">Descrição</label>
-                        <input type="text" value={description} onChange={e => setDescription(e.target.value)} className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2"/>
+                        <label className="block text-sm font-medium mb-1">Descrição</label>
+                        <input type="text" value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Aluguel, Internet..."/>
                     </div>
                     
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium">Valor (R$)</label>
-                            <input type="text" value={amount} onChange={e => handleCurrencyChange(e.target.value, setAmount)} className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2 font-bold text-red-500"/>
+                            <label className="block text-sm font-medium mb-1">Valor (R$)</label>
+                            <input type="text" value={amount} onChange={e => handleCurrencyChange(e.target.value, setAmount)} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 font-bold text-red-500 focus:ring-2 focus:ring-red-500"/>
                         </div>
                         <div>
-                            <label className="block text-sm font-medium">Categoria</label>
-                            <select value={category} onChange={e => setCategory(e.target.value as TransactionCategory)} className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2">
+                            <label className="block text-sm font-medium mb-1">Categoria</label>
+                            <select value={category} onChange={e => setCategory(e.target.value as TransactionCategory)} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500">
                                 {allowedCategories.map(cat => <option key={cat} value={cat}>{cat}</option>)}
                             </select>
                         </div>
                     </div>
 
-                    {/* Method Selection - Determine if Credit Card */}
-                    <div className="bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600 space-y-3">
-                        <h4 className="text-xs font-bold uppercase text-gray-500">Forma de Pagamento (Opcional)</h4>
-                        <div className="grid grid-cols-2 gap-4">
-                            <div>
-                                <label className="block text-xs font-medium mb-1">Banco</label>
-                                <select 
-                                    value={selectedAccountId} 
-                                    onChange={e => { setSelectedAccountId(e.target.value); setSelectedMethodId(''); }} 
-                                    className="w-full rounded text-sm p-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-500"
-                                >
-                                    <option value="">Manual / Nenhum</option>
-                                    {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName}</option>)}
-                                </select>
-                            </div>
-                            <div>
-                                <label className="block text-xs font-medium mb-1">Método</label>
-                                <select 
-                                    value={selectedMethodId} 
-                                    onChange={e => setSelectedMethodId(e.target.value)} 
-                                    disabled={!selectedAccountId}
-                                    className="w-full rounded text-sm p-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-500 disabled:opacity-50"
-                                >
-                                    <option value="">Selecione...</option>
-                                    {selectedAccount?.paymentMethods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
-                                </select>
-                            </div>
-                        </div>
-
-                        {isCreditCard && (
-                            <div className="animate-fade-in p-2 bg-yellow-50 dark:bg-yellow-900/10 rounded border border-yellow-200 dark:border-yellow-800">
-                                <div className="flex justify-between items-center mb-2">
-                                    <label className="text-xs font-bold text-yellow-800 dark:text-yellow-500">Parcelamento</label>
-                                    <select 
-                                        value={installments} 
-                                        onChange={e => setInstallments(parseInt(e.target.value))}
-                                        className="text-xs rounded p-1 bg-white dark:bg-gray-800 border border-yellow-300"
-                                    >
-                                        {Array.from({length: 12}, (_, i) => i + 1).map(n => (
-                                            <option key={n} value={n}>{n}x</option>
-                                        ))}
-                                    </select>
-                                </div>
-                                <p className="text-[10px] text-yellow-700 dark:text-yellow-400 leading-tight">
-                                    <span className="font-bold">Atenção:</span> Compras no cartão geram dívida (Pendente) até o pagamento da fatura. As datas de vencimento serão geradas automaticamente.
-                                </p>
-                            </div>
-                        )}
-                    </div>
-
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium">Data da Compra</label>
+                            <label className="block text-sm font-medium mb-1">Data da Compra</label>
                             <input 
                                 type="date" 
                                 value={purchaseDate} 
                                 onChange={e => setPurchaseDate(e.target.value)} 
-                                className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2"
+                                className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5"
                             />
                         </div>
-                        
                         <div>
-                            <label className="block text-sm font-medium">Status</label>
+                            <label className="block text-sm font-medium mb-1">Status</label>
                             <select 
                                 value={status} 
-                                onChange={e => setStatus(e.target.value as TransactionStatus)} 
-                                disabled={isCreditCard} // Locked if Credit Card
-                                className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2 disabled:opacity-70 disabled:cursor-not-allowed"
+                                onChange={e => {
+                                    setStatus(e.target.value as TransactionStatus);
+                                    // Reset payment selections if going back to pending to avoid confusion
+                                    if(e.target.value === TransactionStatus.PENDING) {
+                                        setSelectedAccountId('');
+                                        setSelectedMethodId('');
+                                    }
+                                }} 
+                                className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 font-semibold"
                             >
-                                <option value={TransactionStatus.PENDING}>Pendente / A Pagar</option>
-                                <option value={TransactionStatus.PAID}>Pago / Realizado</option>
+                                <option value={TransactionStatus.PENDING}>🔴 Pendente (A Pagar)</option>
+                                <option value={TransactionStatus.PAID}>🟢 Pago (Realizado)</option>
                             </select>
                         </div>
                     </div>
 
-                    {!isCreditCard && (
-                        <div className="grid grid-cols-2 gap-4 animate-fade-in">
-                            <div>
-                                <label className="block text-sm font-medium">Vencimento <span className="text-red-500">*</span></label>
-                                <input 
-                                    type="date" 
-                                    value={dueDate} 
-                                    onChange={e => setDueDate(e.target.value)} 
-                                    className="mt-1 block w-full rounded-md bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2"
-                                />
-                            </div>
-                            {status === TransactionStatus.PAID && (
+                    {/* DYNAMIC SECTION: BASED ON STATUS */}
+                    
+                    {/* SCENARIO 1: PENDING */}
+                    {status === TransactionStatus.PENDING && (
+                        <div className="bg-yellow-50 dark:bg-yellow-900/10 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800 animate-fade-in">
+                            <label className="block text-sm font-medium text-yellow-800 dark:text-yellow-500 mb-1">Data de Vencimento <span className="text-red-500">*</span></label>
+                            <input 
+                                type="date" 
+                                value={dueDate} 
+                                onChange={e => setDueDate(e.target.value)} 
+                                required
+                                className="w-full rounded-lg bg-white dark:bg-gray-800 border-yellow-300 dark:border-yellow-600 p-2.5"
+                            />
+                            <p className="text-xs text-yellow-700 dark:text-yellow-400 mt-2">
+                                * O valor ficará em aberto no fluxo de caixa até ser baixado.
+                            </p>
+                        </div>
+                    )}
+
+                    {/* SCENARIO 2: PAID (Includes Credit Card Logic) */}
+                    {status === TransactionStatus.PAID && (
+                        <div className="bg-green-50 dark:bg-green-900/10 p-4 rounded-lg border border-green-200 dark:border-green-800 space-y-4 animate-fade-in">
+                            <div className="grid grid-cols-2 gap-4">
                                 <div>
-                                    <label className="block text-sm font-medium text-green-600">Data Pagamento <span className="text-red-500">*</span></label>
-                                    <input 
-                                        type="date" 
-                                        value={paymentDate} 
-                                        onChange={e => setPaymentDate(e.target.value)} 
-                                        className="mt-1 block w-full rounded-md bg-green-50 dark:bg-gray-700 border-green-300 dark:border-green-600 p-2"
-                                    />
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Conta / Banco</label>
+                                    <select 
+                                        value={selectedAccountId} 
+                                        onChange={e => { setSelectedAccountId(e.target.value); setSelectedMethodId(''); }} 
+                                        className="w-full rounded-lg text-sm p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName}</option>)}
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Forma de Pagto</label>
+                                    <select 
+                                        value={selectedMethodId} 
+                                        onChange={e => setSelectedMethodId(e.target.value)} 
+                                        disabled={!selectedAccountId}
+                                        className="w-full rounded-lg text-sm p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 disabled:opacity-50"
+                                    >
+                                        <option value="">Selecione...</option>
+                                        {selectedAccount?.paymentMethods.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}
+                                    </select>
+                                </div>
+                            </div>
+
+                            {/* SUB-SCENARIO 2A: Credit Card */}
+                            {isCreditCard && (
+                                <div className="p-3 bg-white dark:bg-gray-800 rounded border border-indigo-200 dark:border-indigo-800 shadow-sm">
+                                    <div className="flex justify-between items-center mb-2">
+                                        <label className="text-sm font-bold text-indigo-600 dark:text-indigo-400">Parcelamento (Fatura)</label>
+                                        <select 
+                                            value={installments} 
+                                            onChange={e => setInstallments(parseInt(e.target.value))}
+                                            className="text-sm rounded p-1 border border-indigo-300 bg-indigo-50 dark:bg-gray-700"
+                                        >
+                                            {Array.from({length: 12}, (_, i) => i + 1).map(n => (
+                                                <option key={n} value={n}>{n}x</option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                                        <p>✅ Compra realizada (Fato Gerador).</p>
+                                        <p>📅 <strong>Vencimento Estimado:</strong> {estimatedFirstDueDate || 'Calculando...'}</p>
+                                        <p className="text-orange-500 font-medium">⚠ O status ficará como "Pendente" até o pagamento da fatura do cartão.</p>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* SUB-SCENARIO 2B: Immediate Payment (Cash/Debit/Pix) */}
+                            {!isCreditCard && selectedMethodId && (
+                                <div className="grid grid-cols-2 gap-4">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">Vencimento Original</label>
+                                        <input 
+                                            type="date" 
+                                            value={dueDate} 
+                                            onChange={e => setDueDate(e.target.value)} 
+                                            className="w-full rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 p-2.5"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1 text-green-600 dark:text-green-400">Data do Pagamento <span className="text-red-500">*</span></label>
+                                        <input 
+                                            type="date" 
+                                            value={paymentDate} 
+                                            onChange={e => setPaymentDate(e.target.value)} 
+                                            required
+                                            className="w-full rounded-lg bg-white dark:bg-gray-800 border-green-300 dark:border-green-600 p-2.5 ring-1 ring-green-100"
+                                        />
+                                    </div>
                                 </div>
                             )}
                         </div>
                     )}
 
-                    {dateError && <p className="text-xs text-red-500">{dateError}</p>}
-                    {error && <p className="text-xs text-red-500">{error}</p>}
+                    {error && <p className="text-sm text-red-500 bg-red-50 dark:bg-red-900/20 p-2 rounded text-center">{error}</p>}
 
-                    <div className="flex justify-end space-x-4 pt-4">
-                        <button type="button" onClick={onClose} className="px-4 py-2 rounded-md bg-gray-200 dark:bg-gray-600 hover:bg-gray-300">Cancelar</button>
-                        <button type="submit" disabled={isSaveDisabled} className="px-4 py-2 rounded-md text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400">Salvar</button>
+                    <div className="flex justify-end space-x-3 pt-2">
+                        <button type="button" onClick={onClose} className="px-5 py-2.5 rounded-lg text-gray-700 bg-gray-200 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-200 dark:hover:bg-gray-600 font-medium">Cancelar</button>
+                        <button type="submit" disabled={isSaveDisabled} className="px-5 py-2.5 rounded-lg text-white bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed font-bold shadow-lg transition-transform hover:scale-105">
+                            Salvar Lançamento
+                        </button>
                     </div>
                 </form>
             </div>
@@ -371,7 +429,6 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
         if (competency) {
             const [year, month] = competency.split('-').map(Number);
             result = result.filter(t => {
-                // Filter by Competence (timestamp) mostly, or due date? Standard is Competence for Costs view.
                 const transactionDate = new Date(t.timestamp);
                 return transactionDate.getFullYear() === year && transactionDate.getMonth() + 1 === month;
             });
@@ -421,8 +478,10 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                 />
             )}
             <div className="flex justify-between items-center mb-6">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerenciar Custos</h1>
-                <button onClick={() => { setEditingCost(null); setIsModalOpen(true); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700">Adicionar Custo</button>
+                <h1 className="text-3xl font-bold text-gray-900 dark:text-white">Gerenciar Custos Fixos</h1>
+                <button onClick={() => { setEditingCost(null); setIsModalOpen(true); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 shadow-lg transition-transform hover:scale-105">
+                    Adicionar Custo
+                </button>
             </div>
 
             <div className="bg-white dark:bg-gray-800 p-4 rounded-xl shadow-lg mb-6 space-y-4">
@@ -501,7 +560,7 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                             {t.dueDate ? (
                                                 <div className={isLatePending ? "text-red-500 font-bold" : ""}>
                                                     {formatDateUTC(t.dueDate)}
-                                                    {isLatePending && <span className="block text-[10px] uppercase">Atrasado</span>}
+                                                    {isLatePending && <span className="block text-[10px] uppercase">Vencido</span>}
                                                 </div>
                                             ) : '-'}
                                         </td>
