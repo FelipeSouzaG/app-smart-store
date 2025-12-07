@@ -416,7 +416,7 @@ const Layout: React.FC = () => {
             case 'sales-history': return <SalesHistory ticketSales={ticketSales} onDeleteSale={handleDeleteSale} setActivePage={setActivePage} />;
             // Pass updateTransaction to Cash so it can perform full object updates (including paymentDate)
             case 'cash': return <Cash transactions={transactions} updateTransactionStatus={updateTransactionStatus} updateTransaction={updateTransaction} />;
-            case 'purchases': return <Purchases products={products} purchaseOrders={purchaseOrders} suppliers={suppliers} onAddPurchase={handleAddPurchase} onUpdatePurchase={updatePurchaseOrder} onDeletePurchase={deletePurchaseOrder} />;
+            case 'purchases': return <Purchases products={products} purchaseOrders={purchaseOrders} onAddPurchase={handleAddPurchase} onUpdatePurchase={updatePurchaseOrder} onDeletePurchase={deletePurchaseOrder} />;
             case 'costs': return <Costs transactions={transactions} addTransaction={addTransaction} updateTransaction={updateTransaction} deleteTransaction={deleteTransaction} />;
             case 'service-orders': return <ServiceOrders services={services} serviceOrders={serviceOrders} onAddServiceOrder={addServiceOrder} onUpdateServiceOrder={updateServiceOrder} onDeleteServiceOrder={deleteServiceOrder} onToggleStatus={toggleServiceOrderStatus} setActivePage={setActivePage} goals={goals} />;
             case 'products': return <Products products={products} ticketSales={ticketSales} onAddProduct={addProduct} onUpdateProduct={(p) => updateProduct(p)} onDeleteProduct={deleteProduct} goals={goals} />;
