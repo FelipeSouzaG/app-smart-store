@@ -117,15 +117,13 @@ const CreditCardInvoicesModal: React.FC<{
                 const aggregated: {[key: string]: { dateObj: Date, total: number, count: number }} = {};
 
                 data.forEach((item: any) => {
-                    // Use dueDate as the grouping key (ISO string usually safe for daily bucket if time is normalized)
-                    // If time varies, normalize to YYYY-MM-DD or YYYY-MM-15 (since backend usually sets fixed due day)
                     const dueDate = new Date(item.dueDate);
                     // Create a unique key for Month/Year based on Due Date (e.g., "2023-10")
                     const key = `${dueDate.getUTCFullYear()}-${String(dueDate.getUTCMonth() + 1).padStart(2, '0')}`;
                     
                     if (!aggregated[key]) {
                         aggregated[key] = {
-                            dateObj: dueDate, // Keep one date object for formatting
+                            dateObj: dueDate, 
                             total: 0,
                             count: 0
                         };
@@ -135,7 +133,7 @@ const CreditCardInvoicesModal: React.FC<{
                     aggregated[key].count += 1;
                 });
 
-                // Convert to array and sort descending by date
+                // Convert to array and sort descending by date (Newest first)
                 const invoicesArray = Object.values(aggregated).sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
                 setInvoices(invoicesArray);
             }
@@ -143,6 +141,20 @@ const CreditCardInvoicesModal: React.FC<{
         };
         fetchAndAggregate();
     }, [account, method]);
+
+    const getStatus = (dueDate: Date) => {
+        const today = new Date();
+        // Remove time for comparison
+        today.setHours(0,0,0,0);
+        const due = new Date(dueDate);
+        due.setHours(0,0,0,0);
+
+        if (due < today) return <span className="text-red-500 font-bold text-xs uppercase">Fechada / Vencida</span>;
+        
+        // Simple logic: If within same month/year, it might be Open or Closing. 
+        // This is a visual estimation for the user.
+        return <span className="text-green-500 font-bold text-xs uppercase">Aberta / Futura</span>;
+    };
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[70] p-4">
@@ -152,7 +164,7 @@ const CreditCardInvoicesModal: React.FC<{
                         <h2 className="text-xl font-bold text-gray-900 dark:text-white">
                             Faturas: {method.name}
                         </h2>
-                        <p className="text-sm text-gray-500">{account.bankName} - Resumo por Competência</p>
+                        <p className="text-sm text-gray-500">{account.bankName} - Consolidado Mensal</p>
                     </div>
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:hover:text-white text-2xl">&times;</button>
                 </div>
@@ -166,14 +178,16 @@ const CreditCardInvoicesModal: React.FC<{
                         <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
                             <thead className="text-xs text-gray-700 uppercase bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-200">
                                 <tr>
-                                    <th className="px-6 py-4 rounded-tl-lg">Competência (Mês/Ano)</th>
-                                    <th className="px-6 py-4">Data de Vencimento</th>
-                                    <th className="px-6 py-4">Qtd. Lançamentos</th>
-                                    <th className="px-6 py-4 text-right rounded-tr-lg">Valor Total da Fatura</th>
+                                    <th className="px-6 py-4 rounded-tl-lg">Mês de Referência</th>
+                                    <th className="px-6 py-4">Vencimento da Fatura</th>
+                                    <th className="px-6 py-4">Status</th>
+                                    <th className="px-6 py-4">Qtd. Itens</th>
+                                    <th className="px-6 py-4 text-right rounded-tr-lg">Total da Fatura</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {invoices.map((inv, idx) => {
+                                    // Competence is primarily defined by the payment month (Due Date Month)
                                     const monthYear = inv.dateObj.toLocaleDateString('pt-BR', { timeZone: 'UTC', month: 'long', year: 'numeric' });
                                     const fullDate = formatDateUTC(inv.dateObj);
                                     
@@ -185,8 +199,11 @@ const CreditCardInvoicesModal: React.FC<{
                                             <td className="px-6 py-4 font-medium">
                                                 {fullDate}
                                             </td>
+                                            <td className="px-6 py-4">
+                                                {getStatus(inv.dateObj)}
+                                            </td>
                                             <td className="px-6 py-4 text-gray-500">
-                                                {inv.count} itens
+                                                {inv.count}
                                             </td>
                                             <td className="px-6 py-4 text-right">
                                                 <span className="text-lg font-bold text-red-600 dark:text-red-400">
@@ -201,8 +218,9 @@ const CreditCardInvoicesModal: React.FC<{
                     )}
                 </div>
                 
-                <div className="p-4 bg-gray-50 dark:bg-gray-700/30 text-xs text-gray-500 text-center border-t dark:border-gray-700">
-                    <p>💡 Esta tabela agrupa os custos baseando-se na data de vencimento da fatura gerada pelo sistema.</p>
+                <div className="p-4 bg-blue-50 dark:bg-blue-900/10 text-xs text-blue-700 dark:text-blue-300 text-center border-t dark:border-gray-700">
+                    <p className="font-semibold">💡 Como funciona o ciclo?</p>
+                    <p>O sistema agrupa as parcelas pela <strong>Data de Vencimento</strong>. Compras realizadas após o dia de fechamento (corte) entram automaticamente na fatura com vencimento no mês seguinte.</p>
                 </div>
 
                 <div className="p-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800 text-right">
