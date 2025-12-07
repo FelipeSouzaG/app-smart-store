@@ -164,8 +164,9 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
     useEffect(() => {
         if (purchaseToEdit) {
             setItems(purchaseToEdit.items);
-            setFreightCost(formatMoney(String(purchaseToEdit.freightCost * 100)));
-            setOtherCost(formatMoney(String(purchaseToEdit.otherCost * 100)));
+            // Fix: Use toFixed(0) to prevent floating point issues when creating the string for formatting
+            setFreightCost(formatMoney((purchaseToEdit.freightCost * 100).toFixed(0)));
+            setOtherCost(formatMoney((purchaseToEdit.otherCost * 100).toFixed(0)));
             
             setSupplierName(purchaseToEdit.supplierInfo?.name || '');
             setSupplierCnpjCpf(purchaseToEdit.supplierInfo?.cnpjCpf || '');
@@ -825,6 +826,19 @@ const Purchases: React.FC<PurchasesProps> = ({ products, purchaseOrders, onAddPu
     const [endDate, setEndDate] = useState('');
     const [currentPage, setCurrentPage] = useState(1);
     const recordsPerPage = 15;
+    
+    // State to store accounts locally for lookup
+    const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
+    const { apiCall } = useContext(AuthContext);
+
+    // Fetch accounts on load to map Payment Method IDs to Names
+    useEffect(() => {
+        const fetchAccounts = async () => {
+            const data = await apiCall('financial', 'GET');
+            if (data) setAccounts(data);
+        };
+        fetchAccounts();
+    }, [apiCall]);
 
 
     const handleOpenCreateModal = () => {
@@ -907,6 +921,22 @@ const Purchases: React.FC<PurchasesProps> = ({ products, purchaseOrders, onAddPu
     useEffect(() => {
         setCurrentPage(1);
     }, [searchTerm, startDate, endDate]);
+
+    // Helper to resolve Payment Label
+    const getPaymentLabel = (pd: any) => {
+        if (pd.financialAccountId === 'cash-box') return 'Dinheiro do Caixa';
+        
+        if (pd.financialAccountId) {
+            const acc = accounts.find(a => a.id === pd.financialAccountId);
+            if (acc) {
+                // Try to find specific method name
+                const method = acc.paymentMethods.find(m => (m.id || (m as any)._id) === pd.paymentMethodId);
+                if (method) return `${acc.bankName} - ${method.name}`;
+                return acc.bankName; // Fallback to Bank Name
+            }
+        }
+        return pd.method; // Fallback to enum string (e.g. Boleto, Pix) or legacy data
+    };
 
 
     return (
@@ -1001,7 +1031,7 @@ const Purchases: React.FC<PurchasesProps> = ({ products, purchaseOrders, onAddPu
                                                 ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300' 
                                                 : 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300'
                                         }`}>
-                                            {(po.paymentDetails as any).financialAccountId ? 'Financeiro' : po.paymentDetails.method}
+                                            {getPaymentLabel(po.paymentDetails)}
                                         </span>
                                     </td>
                                      <td className="px-6 py-4 whitespace-nowrap">
