@@ -16,7 +16,7 @@ const formatDateUTC = (dateString: Date | string | undefined) => {
     return new Date(dateString).toLocaleDateString('pt-BR', { timeZone: 'UTC' });
 };
 
-// Nova Tabela Específica para o Cartão de Crédito
+// --- MODAL 1: TABELA DETALHADA (EXTRATO) ---
 const CreditCardStatementModal: React.FC<{ 
     account: FinancialAccount, 
     method: PaymentMethodConfig, 
@@ -98,6 +98,121 @@ const CreditCardStatementModal: React.FC<{
     );
 };
 
+// --- MODAL 2: FATURAS AGREGADAS (RESUMO) ---
+const CreditCardInvoicesModal: React.FC<{ 
+    account: FinancialAccount, 
+    method: PaymentMethodConfig, 
+    onClose: () => void 
+}> = ({ account, method, onClose }) => {
+    const { apiCall } = useContext(AuthContext);
+    const [invoices, setInvoices] = useState<any[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        const fetchAndAggregate = async () => {
+            const data = await apiCall(`financial/statement?accountId=${account.id}&methodId=${method.id}`, 'GET');
+            
+            if (data && Array.isArray(data)) {
+                // Agregar por Competência (Data de Vencimento)
+                const aggregated: {[key: string]: { dateObj: Date, total: number, count: number }} = {};
+
+                data.forEach((item: any) => {
+                    // Use dueDate as the grouping key (ISO string usually safe for daily bucket if time is normalized)
+                    // If time varies, normalize to YYYY-MM-DD or YYYY-MM-15 (since backend usually sets fixed due day)
+                    const dueDate = new Date(item.dueDate);
+                    // Create a unique key for Month/Year based on Due Date (e.g., "2023-10")
+                    const key = `${dueDate.getUTCFullYear()}-${String(dueDate.getUTCMonth() + 1).padStart(2, '0')}`;
+                    
+                    if (!aggregated[key]) {
+                        aggregated[key] = {
+                            dateObj: dueDate, // Keep one date object for formatting
+                            total: 0,
+                            count: 0
+                        };
+                    }
+                    
+                    aggregated[key].total += item.amount;
+                    aggregated[key].count += 1;
+                });
+
+                // Convert to array and sort descending by date
+                const invoicesArray = Object.values(aggregated).sort((a, b) => b.dateObj.getTime() - a.dateObj.getTime());
+                setInvoices(invoicesArray);
+            }
+            setLoading(false);
+        };
+        fetchAndAggregate();
+    }, [account, method]);
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-[70] p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto flex flex-col">
+                <div className="p-6 border-b dark:border-gray-700 flex justify-between items-center sticky top-0 bg-white dark:bg-gray-800 z-10">
+                    <div>
+                        <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                            Faturas: {method.name}
+                        </h2>
+                        <p className="text-sm text-gray-500">{account.bankName} - Resumo por Competência</p>
+                    </div>
+                    <button onClick={onClose} className="text-gray-500 hover:text-gray-800 dark:hover:text-white text-2xl">&times;</button>
+                </div>
+
+                <div className="p-6 overflow-x-auto">
+                    {loading ? (
+                        <p className="text-center text-gray-500 py-8">Calculando faturas...</p>
+                    ) : invoices.length === 0 ? (
+                        <p className="text-center text-gray-500 py-8">Nenhuma fatura gerada para este cartão.</p>
+                    ) : (
+                        <table className="w-full text-sm text-left text-gray-500 dark:text-gray-400">
+                            <thead className="text-xs text-gray-700 uppercase bg-yellow-50 dark:bg-yellow-900/20 dark:text-yellow-200">
+                                <tr>
+                                    <th className="px-6 py-4 rounded-tl-lg">Competência (Mês/Ano)</th>
+                                    <th className="px-6 py-4">Data de Vencimento</th>
+                                    <th className="px-6 py-4">Qtd. Lançamentos</th>
+                                    <th className="px-6 py-4 text-right rounded-tr-lg">Valor Total da Fatura</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {invoices.map((inv, idx) => {
+                                    const monthYear = inv.dateObj.toLocaleDateString('pt-BR', { timeZone: 'UTC', month: 'long', year: 'numeric' });
+                                    const fullDate = formatDateUTC(inv.dateObj);
+                                    
+                                    return (
+                                        <tr key={idx} className="border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 transition-colors">
+                                            <td className="px-6 py-4 font-bold text-gray-900 dark:text-white capitalize">
+                                                {monthYear}
+                                            </td>
+                                            <td className="px-6 py-4 font-medium">
+                                                {fullDate}
+                                            </td>
+                                            <td className="px-6 py-4 text-gray-500">
+                                                {inv.count} itens
+                                            </td>
+                                            <td className="px-6 py-4 text-right">
+                                                <span className="text-lg font-bold text-red-600 dark:text-red-400">
+                                                    R$ {formatCurrencyNumber(inv.total)}
+                                                </span>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+                            </tbody>
+                        </table>
+                    )}
+                </div>
+                
+                <div className="p-4 bg-gray-50 dark:bg-gray-700/30 text-xs text-gray-500 text-center border-t dark:border-gray-700">
+                    <p>💡 Esta tabela agrupa os custos baseando-se na data de vencimento da fatura gerada pelo sistema.</p>
+                </div>
+
+                <div className="p-4 border-t dark:border-gray-700 bg-white dark:bg-gray-800 text-right">
+                    <button onClick={onClose} className="px-6 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg">Fechar</button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 const Finance: React.FC = () => {
     const { apiCall } = useContext(AuthContext);
     const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
@@ -109,6 +224,8 @@ const Finance: React.FC = () => {
 
     // Invoice View State
     const [statementViewer, setStatementViewer] = useState<{ account: FinancialAccount, method: PaymentMethodConfig } | null>(null);
+    // Invoice Summary View State
+    const [invoiceViewer, setInvoiceViewer] = useState<{ account: FinancialAccount, method: PaymentMethodConfig } | null>(null);
 
     // Form State
     const [bankName, setBankName] = useState('');
@@ -236,6 +353,14 @@ const Finance: React.FC = () => {
                 />
             )}
 
+            {invoiceViewer && (
+                <CreditCardInvoicesModal 
+                    account={invoiceViewer.account} 
+                    method={invoiceViewer.method} 
+                    onClose={() => setInvoiceViewer(null)} 
+                />
+            )}
+
             {/* HEADER & BANKS */}
             <div>
                 <div className="flex justify-between items-center mb-6">
@@ -284,18 +409,26 @@ const Finance: React.FC = () => {
                                     {acc.paymentMethods.length === 0 ? <p className="text-xs text-gray-500 italic">Nenhum configurado</p> : (
                                         <ul className="space-y-2">
                                             {acc.paymentMethods.map((pm, i) => (
-                                                <li key={i} className="flex justify-between items-center text-sm p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                                <li key={i} className="flex justify-between items-center text-sm p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg flex-wrap gap-2">
                                                     <div className="flex items-center gap-2">
                                                         <span className="text-gray-700 dark:text-gray-300 font-medium">{pm.name}</span>
                                                         <span className="text-[10px] text-gray-500 bg-gray-200 dark:bg-gray-600 px-1.5 rounded">{methodTypes[pm.type]}</span>
                                                     </div>
                                                     {pm.type === 'Credit' && (
-                                                        <button 
-                                                            onClick={() => setStatementViewer({ account: acc, method: pm })}
-                                                            className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200 transition-colors"
-                                                        >
-                                                            Extrato
-                                                        </button>
+                                                        <div className="flex gap-2 ml-auto">
+                                                            <button 
+                                                                onClick={() => setStatementViewer({ account: acc, method: pm })}
+                                                                className="text-xs bg-gray-100 text-gray-700 border border-gray-300 px-2 py-1 rounded hover:bg-gray-200 transition-colors"
+                                                            >
+                                                                Extrato
+                                                            </button>
+                                                            <button 
+                                                                onClick={() => setInvoiceViewer({ account: acc, method: pm })}
+                                                                className="text-xs bg-indigo-100 text-indigo-700 px-2 py-1 rounded hover:bg-indigo-200 transition-colors font-bold"
+                                                            >
+                                                                Faturas
+                                                            </button>
+                                                        </div>
                                                     )}
                                                 </li>
                                             ))}
@@ -475,14 +608,24 @@ const Finance: React.FC = () => {
                                                         </div>
                                                         {/* Botão solicitado para ver lançamentos DENTRO do formulário de edição */}
                                                         {editingAccount && (
-                                                            <button 
-                                                                type="button"
-                                                                onClick={() => setStatementViewer({ account: editingAccount, method: pm })}
-                                                                className="col-span-2 mt-2 w-full py-2 bg-indigo-600 text-white rounded font-bold text-xs hover:bg-indigo-700 flex items-center justify-center gap-2"
-                                                            >
-                                                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
-                                                                Ver Lançamentos (Fatura)
-                                                            </button>
+                                                            <div className="col-span-2 flex gap-2">
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => setStatementViewer({ account: editingAccount, method: pm })}
+                                                                    className="flex-1 mt-2 py-2 bg-gray-200 text-gray-800 rounded font-bold text-xs hover:bg-gray-300 flex items-center justify-center gap-2 border border-gray-300"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" /></svg>
+                                                                    Extrato
+                                                                </button>
+                                                                <button 
+                                                                    type="button"
+                                                                    onClick={() => setInvoiceViewer({ account: editingAccount, method: pm })}
+                                                                    className="flex-1 mt-2 py-2 bg-indigo-600 text-white rounded font-bold text-xs hover:bg-indigo-700 flex items-center justify-center gap-2"
+                                                                >
+                                                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z" /></svg>
+                                                                    Faturas
+                                                                </button>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 )}
