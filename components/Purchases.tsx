@@ -179,7 +179,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             if ((pd as any).financialAccountId) {
                 setSelectedAccountId((pd as any).financialAccountId);
                 setSelectedMethodId((pd as any).paymentMethodId || '');
-                if ((pd as any).installments) setInstallmentsCount((pd as any).installments.length || 1);
+                if ((pd as any).installmentCount) setInstallmentsCount((pd as any).installmentCount || 1);
             } else {
                 // Fallback for legacy data visualization
                 setSelectedAccountId('');
@@ -495,7 +495,8 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
         let paymentDetails: any = {
             financialAccountId: selectedAccountId,
             paymentMethodId: selectedMethodId,
-            installments: isCreditCard ? installmentsCount : 1
+            // For credit card, we send installmentCount instead of installments array to avoid CastError on backend
+            installmentCount: isCreditCard ? installmentsCount : 1
         };
 
         if (isCashBox) {
