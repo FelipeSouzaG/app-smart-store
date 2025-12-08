@@ -79,6 +79,7 @@ const PaymentDateModal: React.FC<{
 const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, updateTransaction }) => {
     const { apiCall } = useContext(AuthContext);
     const [transactionToPay, setTransactionToPay] = useState<string | null>(null);
+    const [installmentToPay, setInstallmentToPay] = useState<number | null>(null);
 
     const getCurrentCompetency = () => {
         const now = new Date();
@@ -97,26 +98,58 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
         setCompetency(e.target.value);
     };
 
-    // Simply filter the transactions list. The backend now guarantees that Credit Card items 
-    // are aggregated into single Invoice entries, so we don't need complex frontend aggregation anymore.
+    // Filter AND Expand Transactions
+    // If a transaction has 'installments', we check if any installment falls in the current competency.
+    // If so, we create a virtual row for display.
     const filteredTransactions = useMemo(() => {
-        let result = transactions;
+        let result: any[] = [];
+        const [compYear, compMonth] = competency ? competency.split('-').map(Number) : [0, 0];
 
-        if (competency) {
-            const [compYear, compMonth] = competency.split('-').map(Number);
-            result = result.filter(t => {
-                // Use Due Date for expenses/invoices if available, otherwise timestamp
+        transactions.forEach(t => {
+            // Check for expanded installments
+            if (t.installments && t.installments.length > 0) {
+                // Iterate installments to find matching ones for this view
+                t.installments.forEach((inst: any) => {
+                    const refDate = inst.dueDate ? new Date(inst.dueDate) : new Date();
+                    
+                    // Filter by Competency
+                    if (competency && (refDate.getUTCFullYear() !== compYear || (refDate.getUTCMonth() + 1) !== compMonth)) {
+                        return; // Skip if not in month
+                    }
+
+                    // Create Virtual Transaction Object
+                    const virtualT = {
+                        ...t, // Copy parent props
+                        id: t.id, // Keep parent ID
+                        amount: inst.amount,
+                        status: inst.status,
+                        dueDate: inst.dueDate,
+                        paymentDate: inst.paymentDate,
+                        description: `${t.description} (${inst.number}/${t.installments.length})`,
+                        isVirtual: true,
+                        installmentNumber: inst.number
+                    };
+
+                    // Filter by Type/Status on virtual object
+                    if (typeFilter !== 'All' && virtualT.type !== typeFilter) return;
+                    if (statusFilter !== 'All' && virtualT.status !== statusFilter) return;
+
+                    result.push(virtualT);
+                });
+            } else {
+                // Standard Single Transaction
                 const refDate = t.dueDate ? new Date(t.dueDate) : new Date(t.timestamp);
-                return refDate.getUTCFullYear() === compYear && (refDate.getUTCMonth() + 1) === compMonth;
-            });
-        }
+                
+                if (competency && (refDate.getUTCFullYear() !== compYear || (refDate.getUTCMonth() + 1) !== compMonth)) {
+                    return;
+                }
+                if (typeFilter !== 'All' && t.type !== typeFilter) return;
+                if (statusFilter !== 'All' && t.status !== statusFilter) return;
 
-        if (typeFilter !== 'All') {
-            result = result.filter(t => t.type === typeFilter);
-        }
-        if (statusFilter !== 'All') {
-            result = result.filter(t => t.status === statusFilter);
-        }
+                result.push(t);
+            }
+        });
+
         // Sort by date descending
         return result.sort((a,b) => {
              const dateA = a.dueDate ? new Date(a.dueDate) : new Date(a.timestamp);
@@ -128,9 +161,7 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
     const summary = useMemo(() => {
         if (!competency) return { balance: 0, openingBalance: 0, income: 0, expense: 0 };
         
-        const [year, month] = competency.split('-').map(Number);
-        // Approximation of opening balance logic would go here
-        const openingBalance = 0; 
+        const openingBalance = 0; // Future implementation
 
         // Current Month Stats
         const paidTransactionsThisMonth = filteredTransactions.filter(t => t.status === TransactionStatus.PAID);
@@ -163,35 +194,57 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
         if (transactionToPay) {
             const transaction = transactions.find(t => t.id === transactionToPay);
             if (transaction) {
-                // If it is an invoice, we call the specific pay-invoice endpoint? 
-                // Or just update the transaction since it's now a real record in DB?
-                // Answer: Since it's a real record in CashTransaction, standard update works!
-                const updated = {
-                    ...transaction,
-                    status: TransactionStatus.PAID,
-                    paymentDate: safeDate 
-                };
-                updateTransaction(updated);
+                // Check if it's a virtual installment payment
+                if (installmentToPay) {
+                    const payload = {
+                        ...transaction,
+                        status: TransactionStatus.PAID,
+                        paymentDate: safeDate,
+                        installmentNumber: installmentToPay // Critical for backend to know which sub-item to update
+                    };
+                    // Use standard update, backend handles the logic based on installmentNumber presence
+                    await apiCall(`transactions/${transaction.id}`, 'PUT', payload);
+                    // Force refresh context handled by parent usually, but here we optimistically rely on prop update
+                    // Ideally trigger a refresh callback if provided
+                    // For now, we mimic updateTransaction which likely updates parent state
+                    updateTransaction(payload);
+                } else {
+                    // Standard single update
+                    const updated = {
+                        ...transaction,
+                        status: TransactionStatus.PAID,
+                        paymentDate: safeDate 
+                    };
+                    updateTransaction(updated);
+                }
             }
             setTransactionToPay(null);
+            setInstallmentToPay(null);
         }
     };
 
-    const handleRevertToPending = async (transaction: CashTransaction) => {
-        // Prevent reverting invoices via simple button if desired, but technically possible now.
-        const updated = {
+    const handleRevertToPending = async (transaction: any) => {
+        // If virtual, we need to send installment number
+        const payload = {
             ...transaction,
             status: TransactionStatus.PENDING,
-            paymentDate: undefined as any
+            paymentDate: null,
+            installmentNumber: transaction.isVirtual ? transaction.installmentNumber : undefined
         };
-        updateTransaction(updated);
+        
+        if (transaction.isVirtual) {
+             await apiCall(`transactions/${transaction.id}`, 'PUT', payload);
+             updateTransaction(payload); // Trigger UI refresh via parent
+        } else {
+             updateTransaction(payload);
+        }
     };
 
     return (
         <div className="container mx-auto">
             <PaymentDateModal 
                 isOpen={!!transactionToPay} 
-                onClose={() => setTransactionToPay(null)} 
+                onClose={() => { setTransactionToPay(null); setInstallmentToPay(null); }} 
                 onConfirm={handleConfirmPayment}
             />
 
@@ -267,7 +320,7 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
                                     <td colSpan={7} className="text-center py-8 text-gray-500">Nenhum lançamento encontrado para os filtros aplicados.</td>
                                 </tr>
                             ) : (
-                                currentRecords.map(t => {
+                                currentRecords.map((t, idx) => {
                                     const today = new Date().setHours(0,0,0,0);
                                     const dueDateObj = t.dueDate ? new Date(t.dueDate) : null;
                                     const paymentDateObj = t.paymentDate ? new Date(t.paymentDate) : null;
@@ -277,9 +330,11 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
                                     
                                     // Check explicit flag for visual distinction
                                     const isInvoice = (t as any).isInvoice;
+                                    // Key must be unique even for virtual rows
+                                    const rowKey = t.isVirtual ? `${t.id}-inst-${t.installmentNumber}` : t.id;
 
                                     return (
-                                    <tr key={t.id} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 ${isInvoice ? 'bg-indigo-50 dark:bg-indigo-900/10' : 'bg-white dark:bg-gray-800'}`}>
+                                    <tr key={rowKey} className={`border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600 ${isInvoice ? 'bg-indigo-50 dark:bg-indigo-900/10' : 'bg-white dark:bg-gray-800'}`}>
                                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
                                             {isInvoice && <span className="mr-2 text-xl">💳</span>}
                                             {t.description}
@@ -313,7 +368,10 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
                                         <td className="px-6 py-4">
                                             {t.status === TransactionStatus.PENDING && (
                                                  <button
-                                                    onClick={() => setTransactionToPay(t.id)}
+                                                    onClick={() => {
+                                                        setTransactionToPay(t.id);
+                                                        if(t.isVirtual) setInstallmentToPay(t.installmentNumber);
+                                                    }}
                                                     className="px-3 py-1 text-xs font-medium rounded-md text-white bg-green-600 hover:bg-green-700"
                                                 >
                                                     Pagar / Receber
@@ -365,3 +423,4 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
 };
 
 export default Cash;
+
