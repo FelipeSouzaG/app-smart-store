@@ -423,6 +423,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                 financialAccountId: isBoleto ? undefined : selectedAccountId, // Don't send 'boleto' as account ID
                 paymentMethodId: isBoleto ? undefined : selectedMethodId,
                 paymentDate: status === TransactionStatus.PAID ? new Date(paymentDate) : null,
+                installmentCount: isCredit ? installments : 1, // Pass this to backend logic
                 installments: isBoleto ? boletoPreview.map(p => ({
                     installmentNumber: p.number,
                     amount: p.amount,
@@ -795,7 +796,9 @@ const Purchases: React.FC<PurchasesProps> = ({ products, purchaseOrders, onAddPu
 
     // Helpers
     const getPaymentLabel = (pd: any) => {
-        if (pd.financialAccountId === 'cash-box') return 'Pago - Caixa';
+        if (pd.financialAccountId === 'cash-box') {
+            return pd.paymentDate ? 'Pago - Caixa' : 'Pendente - Caixa';
+        }
         
         if (pd.financialAccountId) {
             const acc = accounts.find(a => a.id === pd.financialAccountId);
@@ -998,4 +1001,3 @@ const Purchases: React.FC<PurchasesProps> = ({ products, purchaseOrders, onAddPu
 };
 
 export default Purchases;
-
