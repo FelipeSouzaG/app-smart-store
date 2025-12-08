@@ -13,7 +13,7 @@ interface CostsProps {
 }
 
 interface CostModalProps {
-    costToEdit?: any | null; // Can be CashTransaction or CreditCardTransaction(mapped)
+    costToEdit?: CashTransaction | null;
     accounts: FinancialAccount[];
     onClose: () => void;
     onSave: (transaction: any) => void; 
@@ -69,7 +69,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState<TransactionCategory>(TransactionCategory.OTHER);
-    const [status, setStatus] = useState<TransactionStatus | ''>(''); 
+    const [status, setStatus] = useState<TransactionStatus | ''>(''); // Changed default to empty
     
     const today = new Date().toISOString().split('T')[0];
 
@@ -153,44 +153,20 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
 
     useEffect(() => {
         if (costToEdit) {
-            // Strip installment info from description for editing if present
-            const cleanDesc = costToEdit.description.replace(/\s\(\d+\/\d+\)$/, '');
-            setDescription(cleanDesc);
+            setDescription(costToEdit.description);
             setAmount(formatMoney((costToEdit.amount * 100).toFixed(0)));
             setCategory(costToEdit.category);
+            setStatus(costToEdit.status);
             
-            // Map status correctly
-            if (costToEdit.isCreditCard) {
-                // If it's a CC transaction, treat it as Paid (via Credit Card)
-                setStatus(TransactionStatus.PAID);
-            } else {
-                setStatus(costToEdit.status);
-            }
-            
-            // Map Dates
             setPurchaseDate(costToEdit.timestamp ? new Date(costToEdit.timestamp).toISOString().split('T')[0] : today);
+            setDueDate(costToEdit.dueDate ? new Date(costToEdit.dueDate).toISOString().split('T')[0] : '');
+            setPaymentDate(costToEdit.paymentDate ? new Date(costToEdit.paymentDate).toISOString().split('T')[0] : '');
             
-            if (costToEdit.isCreditCard) {
-                setPaymentDate(costToEdit.timestamp ? new Date(costToEdit.timestamp).toISOString().split('T')[0] : '');
-                setDueDate('');
-            } else {
-                setDueDate(costToEdit.dueDate ? new Date(costToEdit.dueDate).toISOString().split('T')[0] : '');
-                setPaymentDate(costToEdit.paymentDate ? new Date(costToEdit.paymentDate).toISOString().split('T')[0] : '');
-            }
-            
-            // Map Account
             if (costToEdit.financialAccountId === 'cash-box' || costToEdit.financialAccountId === 'boleto') {
                 setSelectedAccountId(costToEdit.financialAccountId);
             } else {
                 setSelectedAccountId(costToEdit.financialAccountId || 'cash-box');
                 setSelectedMethodId(costToEdit.paymentMethodId || '');
-            }
-            
-            // Map Installments
-            if (costToEdit.totalInstallments) { // Credit Card specific field
-                setInstallments(costToEdit.totalInstallments);
-            } else if (costToEdit.installments && costToEdit.installments.length > 0) { // CashTransaction array
-                setInstallments(costToEdit.installments.length);
             }
         } else {
             // Defaults for New Cost
@@ -336,7 +312,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                     {/* 2. Valor e Categoria */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium mb-1">Valor Total (R$)</label>
+                            <label className="block text-sm font-medium mb-1">Valor (R$)</label>
                             <input type="text" value={amount} onChange={e => handleCurrencyChange(e.target.value, setAmount)} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 font-bold text-red-500 focus:ring-2 focus:ring-red-500"/>
                         </div>
                         <div>
@@ -518,7 +494,7 @@ const ConfirmationModal: React.FC<{ message: string; onConfirm: () => void; onCa
 const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = [], addTransaction, updateTransaction, deleteTransaction }) => {
     const { apiCall } = useContext(AuthContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingCost, setEditingCost] = useState<any | null>(null);
+    const [editingCost, setEditingCost] = useState<CashTransaction | null>(null);
     const [deletingCostId, setDeletingCostId] = useState<string | null>(null);
     const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
 
@@ -552,68 +528,38 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
         ].includes(cat)
     ), []);
 
-    // Helper to get Account Name for Table
-    const getPaymentMethodLabel = (t: any) => {
-        const isCC = (t as any).isCreditCard;
+    // Helper to get Account Name
+    const getAccountName = (accId: string, methodId?: string) => {
+        if (accId === 'cash-box') return 'Dinheiro';
+        if (accId === 'boleto') return 'Boleto';
         
-        if (isCC) {
-            const acc = accounts.find(a => a.id === t.financialAccountId);
-            if (!acc) return 'Cartão de Crédito';
-            const method = acc.paymentMethods.find(m => (m.id || (m as any)._id) === t.paymentMethodId);
-            return `Pago - ${acc.bankName} (${method?.name || 'Crédito'})`;
-        }
-
-        if (t.financialAccountId === 'cash-box') {
-            return t.status === TransactionStatus.PAID ? 'Pago - Caixa' : 'Pendente - Caixa';
-        }
-        if (t.financialAccountId === 'boleto') {
-            const instCount = t.installments ? t.installments.length : 1;
-            return `Pendente - Boleto${instCount > 1 ? ` (${instCount}x)` : ''}`;
+        const acc = accounts.find(a => a.id === accId);
+        if (!acc) return 'Banco';
+        
+        if (methodId) {
+            const method = acc.paymentMethods.find(m => (m.id || (m as any)._id) === methodId);
+            return `${acc.bankName} (${method?.name || 'Método'})`;
         }
         
-        // Bank (Paid or Pending via Bank Transfer/Pix/Debit)
-        const acc = accounts.find(a => a.id === t.financialAccountId);
-        if (acc) {
-            const method = acc.paymentMethods.find(m => (m.id || (m as any)._id) === t.paymentMethodId);
-            const methodLabel = method ? `(${method.type})` : '';
-            return `${t.status} - ${acc.bankName} ${methodLabel}`;
-        }
-        
-        return '-';
+        return acc.bankName;
     };
 
     const combinedCosts = useMemo(() => {
         // 1. Process Cash Transactions (Expenses only, Exclude Invoices)
         const cashExpenses = transactions.filter(t => 
             t.type === TransactionType.EXPENSE && 
-            !(t as any).isInvoice
+            !(t as any).isInvoice // Exclude Consolidated Invoice Records from this view
         );
 
-        // 2. Process Credit Card Transactions
-        // We need to GROUP them by referenceId to show a single "Parent" record in the list
-        // Filter out automatic ones (source='purchase' or 'service_order') unless we want them here. 
-        // User requested "Manual Costs" view usually implies manual entries.
-        const manualCC = creditCardTransactions.filter(t => t.source === 'manual');
-        
-        const groupedCC: {[key: string]: any} = {};
-        
-        manualCC.forEach(t => {
-            const key = t.referenceId || t.id; // Use referenceId for grouping, fallback to id
-            if (!groupedCC[key]) {
-                groupedCC[key] = {
-                    ...t,
-                    id: key, // Use referenceId as the main ID for editing/deleting the group
-                    amount: 0,
-                    totalInstallments: t.totalInstallments,
-                    isCreditCard: true,
-                    status: TransactionStatus.PAID,
-                    paymentDate: t.timestamp
-                };
-            }
-            groupedCC[key].amount += t.amount;
-        });
-        
-        const creditExpenses = Object.values(groupedCC);
+        // 2. Process Credit Card Transactions (All are Expenses)
+        const creditExpenses = creditCardTransactions.map(t => ({
+            ...t,
+            id: t.id, // Ensure ID is present
+            type: TransactionType.EXPENSE,
+            status: 'Credit', // Internal status marker for UI
+            paymentDate: t.timestamp, // Use purchase date as payment date equivalent for sorting
+            isCreditCard: true
+        }));
 
         // 3. Merge
         const all = [...cashExpenses, ...creditExpenses];
@@ -629,12 +575,15 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
      const filteredCosts = useMemo(() => {
         let result = combinedCosts;
         
+        // Exclude Automatic System Costs from Main View to reduce clutter if desired, 
+        // but user requested "All Costs", so we keep them unless filtered by category.
         const excludedCategories = [TransactionCategory.PRODUCT_PURCHASE, TransactionCategory.SERVICE_COST, TransactionCategory.SALES_REVENUE, TransactionCategory.SERVICE_REVENUE];
         result = result.filter(t => !excludedCategories.includes(t.category));
 
         if (competency) {
             const [year, month] = competency.split('-').map(Number);
             result = result.filter(t => {
+                // Use timestamp (Competence Date) for filtering costs
                 const refDate = new Date(t.timestamp);
                 return refDate.getUTCFullYear() === year && (refDate.getUTCMonth() + 1) === month;
             });
@@ -648,6 +597,7 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
             if (statusFilter === 'Credit') {
                  result = result.filter(t => (t as any).isCreditCard);
             } else {
+                 // For Cash Transactions, match status. For CC, ignore unless we add a specific filter
                  result = result.filter(t => !(t as any).isCreditCard && t.status === statusFilter);
             }
         }
@@ -730,33 +680,45 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
                                 <th scope="col" className="px-6 py-3">Descrição</th>
                                 <th scope="col" className="px-6 py-3">Categoria</th>
                                 <th scope="col" className="px-6 py-3">Valor</th>
+                                <th scope="col" className="px-6 py-3">Status</th>
                                 <th scope="col" className="px-6 py-3">Data</th>
-                                <th scope="col" className="px-6 py-3">Forma de Pagamento</th>
+                                <th scope="col" className="px-6 py-3">Conta / Forma</th>
                                 <th scope="col" className="px-6 py-3">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                              {currentRecords.length === 0 ? (
                                 <tr>
-                                    <td colSpan={6} className="text-center py-8 text-gray-500">Nenhum custo encontrado.</td>
+                                    <td colSpan={7} className="text-center py-8 text-gray-500">Nenhum custo encontrado.</td>
                                 </tr>
                              ) : (
                                 currentRecords.map(t => {
                                     const isCC = (t as any).isCreditCard;
-                                    // Clean description for CC group (remove 1/X) if present
-                                    const displayName = isCC ? t.description.replace(/\s\(\d+\/\d+\)$/, '') : t.description;
                                     
                                     return (
                                     <tr key={t.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
                                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                                            {displayName}
-                                            {isCC && (
-                                                <span className="ml-1 text-xs text-gray-500 block">({(t as any).totalInstallments}x Parcelas)</span>
+                                            {t.description}
+                                            {isCC && (t as any).totalInstallments > 1 && (
+                                                <span className="ml-1 text-xs text-gray-500">({(t as any).installmentNumber}/{(t as any).totalInstallments})</span>
                                             )}
                                         </td>
                                         <td className="px-6 py-4">{t.category}</td>
                                         <td className={`px-6 py-4 font-semibold text-red-500`}>
                                             - R$ {formatCurrencyNumber(t.amount)}
+                                        </td>
+                                        <td className="px-6 py-4">
+                                            {isCC ? (
+                                                <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
+                                                    Cartão
+                                                </span>
+                                            ) : (
+                                                <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
+                                                    t.status === TransactionStatus.PAID 
+                                                    ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300"
+                                                    : "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300"
+                                                }`}>{t.status}</span>
+                                            )}
                                         </td>
                                         
                                         <td className="px-6 py-4">
@@ -770,18 +732,20 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
                                             }
                                         </td>
 
-                                        <td className="px-6 py-4">
-                                            <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
-                                                isCC ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900 dark:text-indigo-300' :
-                                                t.status === TransactionStatus.PAID ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300' :
-                                                'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300'
-                                            }`}>
-                                                {getPaymentMethodLabel(t)}
-                                            </span>
+                                        <td className="px-6 py-4 text-xs font-medium">
+                                            {isCC ? getAccountName(t.financialAccountId!, t.paymentMethodId) : 
+                                             t.financialAccountId === 'cash-box' ? (t.status === TransactionStatus.PAID ? 'Pago - Caixa' : 'Pendente - Caixa') :
+                                             t.financialAccountId === 'boleto' ? 'Pendente - Boleto' :
+                                             getAccountName(t.financialAccountId!, t.paymentMethodId)}
                                         </td>
 
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            <button onClick={() => { setEditingCost(t); setIsModalOpen(true); }} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline mr-4">Editar</button>
+                                            {!isCC && (
+                                                <button onClick={() => { setEditingCost(t); setIsModalOpen(true); }} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline mr-4">Editar</button>
+                                            )}
+                                            {isCC && (
+                                                <span className="text-xs text-gray-400 mr-4 cursor-default" title="Edite no menu Financeiro">Fatura</span>
+                                            )}
                                             <button onClick={() => setDeletingCostId(t.id)} className="font-medium text-red-600 dark:text-red-500 hover:underline">Excluir</button>
                                         </td>
                                     </tr>
