@@ -11,6 +11,40 @@ declare global {
     }
 }
 
+const NotificationModal: React.FC<{ isOpen: boolean; type: 'success' | 'error'; message: string; onClose: () => void }> = ({ isOpen, type, message, onClose }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-[150] flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl p-6 max-w-sm w-full transform transition-all scale-100">
+                <div className={`mx-auto flex items-center justify-center h-12 w-12 rounded-full mb-4 ${type === 'success' ? 'bg-green-100 dark:bg-green-900/50 text-green-600 dark:text-green-400' : 'bg-red-100 dark:bg-red-900/50 text-red-600 dark:text-red-400'}`}>
+                    {type === 'success' ? (
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                    ) : (
+                        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        </svg>
+                    )}
+                </div>
+                <h3 className={`text-lg leading-6 font-bold text-center mb-2 ${type === 'success' ? 'text-gray-900 dark:text-white' : 'text-gray-900 dark:text-white'}`}>
+                    {type === 'success' ? 'Sucesso!' : 'Atenção'}
+                </h3>
+                <p className="text-sm text-gray-500 dark:text-gray-300 text-center mb-6">
+                    {message}
+                </p>
+                <button
+                    onClick={onClose}
+                    className={`w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white focus:outline-none focus:ring-2 focus:ring-offset-2 sm:text-sm transition-colors ${type === 'success' ? 'bg-green-600 hover:bg-green-700 focus:ring-green-500' : 'bg-red-600 hover:bg-red-700 focus:ring-red-500'}`}
+                >
+                    Entendi
+                </button>
+            </div>
+        </div>
+    );
+};
+
 const ScannerModal: React.FC<{ onClose: () => void; onScan: (code: string) => void }> = ({ onClose, onScan }) => {
     const videoRef = useRef<HTMLVideoElement>(null);
     const [error, setError] = useState<string>('');
@@ -93,6 +127,11 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
     const { apiCall } = useContext(AuthContext);
     const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
     
+    // Notification State
+    const [notification, setNotification] = useState<{isOpen: boolean; type: 'success' | 'error'; message: string}>({
+        isOpen: false, type: 'error', message: ''
+    });
+
     // Supplier Info
     const [supplierCnpj, setSupplierCnpj] = useState('');
     const [reference, setReference] = useState('');
@@ -120,8 +159,12 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
     const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
     const [selectedAccountId, setSelectedAccountId] = useState('cash-box');
     const [selectedMethodId, setSelectedMethodId] = useState('');
-    const [installments, setInstallments] = useState(1);
-    const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PAID);
+    const [installments, setInstallments] = useState(1); // Credit Card Installments
+    const [boletoInstallmentsCount, setBoletoInstallmentsCount] = useState(1); // Boleto Installments
+    
+    // Status can be empty string initially to force user selection
+    const [status, setStatus] = useState<TransactionStatus | ''>('');
+    const [statusError, setStatusError] = useState(false);
 
     useEffect(() => {
         const fetchAccounts = async () => {
@@ -144,27 +187,86 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             
             // Map payment details
             const pd = purchaseToEdit.paymentDetails as any;
-            if (pd.financialAccountId === 'cash-box') {
-                setSelectedAccountId('cash-box');
-            } else if (pd.financialAccountId) {
-                setSelectedAccountId(pd.financialAccountId);
-                setSelectedMethodId(pd.paymentMethodId || '');
-            }
-            if (pd.method) setPaymentMethod(pd.method);
             
-            // Status and Dates
-            // Assuming the parent component passes the correct status if stored, or infer
-            // Since PurchaseOrder schema stores payment details but not flat status, we might need to infer
-            // But for simplicity, default to PAID if date exists, else PENDING.
-            if (pd.paymentDate) {
-                setStatus(TransactionStatus.PAID);
-                setPaymentDate(new Date(pd.paymentDate).toISOString().split('T')[0]);
-            } else if (pd.installments && pd.installments.length > 0) {
+            if (pd.method === PaymentMethod.BANK_SLIP) {
                 setStatus(TransactionStatus.PENDING);
-                setDueDate(new Date(pd.installments[0].dueDate).toISOString().split('T')[0]);
+                setSelectedAccountId('boleto');
+                if (pd.installments && pd.installments.length > 0) {
+                    setBoletoInstallmentsCount(pd.installments.length);
+                    // Set due date to the first installment
+                    setDueDate(new Date(pd.installments[0].dueDate).toISOString().split('T')[0]);
+                }
+            } else {
+                if (pd.financialAccountId === 'cash-box') {
+                    setSelectedAccountId('cash-box');
+                } else if (pd.financialAccountId) {
+                    setSelectedAccountId(pd.financialAccountId);
+                    setSelectedMethodId(pd.paymentMethodId || '');
+                }
+                
+                if (pd.paymentDate) {
+                    setStatus(TransactionStatus.PAID);
+                    setPaymentDate(new Date(pd.paymentDate).toISOString().split('T')[0]);
+                } else if (pd.installments && pd.installments.length > 0) {
+                    // Logic for Credit card or other pending logic if applicable
+                    setStatus(TransactionStatus.PENDING);
+                    setDueDate(new Date(pd.installments[0].dueDate).toISOString().split('T')[0]);
+                } else if (pd.method === PaymentMethod.CREDIT_CARD) {
+                     // For credit card displayed as pending usually
+                     setStatus(TransactionStatus.PENDING);
+                } else {
+                     // Default fallback
+                     setStatus(TransactionStatus.PAID);
+                }
+                
+                if (pd.method) setPaymentMethod(pd.method);
             }
         }
     }, [purchaseToEdit]);
+
+    const parseMoney = (val: string) => parseFloat(val.replace('R$ ', '').replace(/\./g, '').replace(',', '.')) || 0;
+
+    const totalItemsCost = items.reduce((sum, item) => sum + (item.unitCost * item.quantity), 0);
+    const totalPurchaseCost = totalItemsCost + parseMoney(freightCost) + parseMoney(otherCost);
+
+    // Boleto Calculation Logic
+    const boletoPreview = useMemo(() => {
+        if (selectedAccountId !== 'boleto' || status !== TransactionStatus.PENDING) return [];
+        
+        const preview = [];
+        const amountPerInstallment = totalPurchaseCost / boletoInstallmentsCount;
+        const baseDate = new Date(dueDate);
+        
+        for (let i = 0; i < boletoInstallmentsCount; i++) {
+            const instDate = new Date(baseDate);
+            instDate.setMonth(baseDate.getMonth() + i);
+            preview.push({
+                number: i + 1,
+                date: instDate,
+                amount: amountPerInstallment
+            });
+        }
+        return preview;
+    }, [selectedAccountId, status, boletoInstallmentsCount, totalPurchaseCost, dueDate]);
+
+
+    // Validation for Future Payment Date
+    const handlePaymentDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newDate = e.target.value;
+        const today = new Date().toISOString().split('T')[0];
+        
+        if (status === TransactionStatus.PAID && newDate > today) {
+            setNotification({
+                isOpen: true,
+                type: 'error',
+                message: 'Para status "Pago", a data não pode ser futura. Se deseja agendar, altere o status para "Pendente" e defina o Vencimento.'
+            });
+            // Reset to today or keep old? Resetting to today is safer UX
+            setPaymentDate(today);
+            return;
+        }
+        setPaymentDate(newDate);
+    };
 
     // Supplier Lookup Function
     const handleCnpjBlur = async () => {
@@ -174,16 +276,12 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
         if (validateRegister(supplierCnpj)) {
             setIsSupplierLoading(true);
             try {
-                // Try to find supplier by ID (CNPJ/CPF acts as ID in many routes or we use the specific endpoint)
-                // The route `GET /api/suppliers/:identifier` handles CNPJ lookup
                 const supplier: Supplier | null = await apiCall(`suppliers/${cleanCnpj}`, 'GET');
-                
                 if (supplier) {
                     setSupplierName(supplier.name);
                     setSupplierContact(supplier.contactPerson || '');
                     setSupplierPhone(formatPhone(supplier.phone));
                 }
-                // If not found, user continues filling to create new
             } catch (err) {
                 console.error("Error fetching supplier:", err);
             } finally {
@@ -220,7 +318,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
         setSearchTerm(product.name);
         setSearchResults([]);
         setQuantity(1);
-        setUnitCost(formatMoney((product.cost * 100).toFixed(0))); // Suggest current cost
+        setUnitCost(formatMoney((product.cost * 100).toFixed(0)));
     };
 
     const handleScan = (code: string) => {
@@ -235,11 +333,9 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
 
     const handleAddItem = () => {
         if (!selectedProductId || quantity <= 0) {
-            // If user typed a barcode directly and didn't select from list
             const directProduct = products.find(p => p.barcode === searchTerm || p.id === searchTerm);
             if (directProduct) {
                 setSelectedProductId(directProduct.id);
-                // Proceed with adding
                 const numericCost = parseFloat(unitCost.replace('R$ ', '').replace(/\./g, '').replace(',', '.')) || 0;
                 const newItem: PurchaseItem = {
                     productId: directProduct.id,
@@ -270,8 +366,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
         };
 
         setItems([...items, newItem]);
-        
-        // Reset Item Fields
         setSearchTerm('');
         setSelectedProductId('');
         setQuantity(1);
@@ -280,13 +374,9 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
 
     const handleEditItem = (index: number) => {
         const itemToEdit = items[index];
-        
-        // Remove from list
         const newItems = [...items];
         newItems.splice(index, 1);
         setItems(newItems);
-
-        // Populate fields
         setSelectedProductId(itemToEdit.productId);
         setSearchTerm(itemToEdit.productName);
         setQuantity(itemToEdit.quantity);
@@ -297,15 +387,20 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
         setItems(items.filter((_, i) => i !== index));
     };
 
-    const parseMoney = (val: string) => parseFloat(val.replace('R$ ', '').replace(/\./g, '').replace(',', '.')) || 0;
-
-    const totalItemsCost = items.reduce((sum, item) => sum + (item.unitCost * item.quantity), 0);
-    const totalPurchaseCost = totalItemsCost + parseMoney(freightCost) + parseMoney(otherCost);
-
     const handleSubmit = () => {
+        // Validation: Status must be selected
+        if (status === '') {
+            setStatusError(true);
+            return;
+        } else {
+            setStatusError(false);
+        }
+
         if (items.length === 0) return alert("Adicione pelo menos um item.");
         if (!supplierName) return alert("Nome do fornecedor obrigatório.");
         if (!supplierCnpj) return alert("CPF/CNPJ do fornecedor obrigatório.");
+
+        const isBoleto = selectedAccountId === 'boleto' && status === TransactionStatus.PENDING;
 
         const payload = {
             items,
@@ -319,18 +414,22 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             freightCost: parseMoney(freightCost),
             otherCost: parseMoney(otherCost),
             totalCost: totalPurchaseCost,
-            // Payment Data structure expected by backend
+            // Payment Data
             paymentDetails: {
-                method: paymentMethod,
-                financialAccountId: selectedAccountId,
-                paymentMethodId: selectedMethodId,
+                method: isBoleto ? PaymentMethod.BANK_SLIP : paymentMethod,
+                financialAccountId: isBoleto ? undefined : selectedAccountId, // Don't send 'boleto' as account ID
+                paymentMethodId: isBoleto ? undefined : selectedMethodId,
                 paymentDate: status === TransactionStatus.PAID ? new Date(paymentDate) : null,
-                installments: [] // Should be handled if method is Bank Slip or Credit
+                installments: isBoleto ? boletoPreview.map(p => ({
+                    installmentNumber: p.number,
+                    amount: p.amount,
+                    dueDate: p.date
+                })) : []
             },
-            status, // Pass status explicitly
+            status,
             paymentDate: status === TransactionStatus.PAID ? paymentDate : null,
             dueDate: dueDate,
-            installments: installments // for Credit Card logic
+            installments: isCredit ? installments : 1 // Credit Card logic from parent
         };
 
         onSave(payload);
@@ -341,11 +440,19 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
     const selectedAccount = accounts.find(a => a.id === selectedAccountId);
     const availableMethods = selectedAccount?.paymentMethods || [];
     const isCredit = availableMethods.find(m => (m.id || (m as any)._id) === selectedMethodId)?.type === 'Credit';
+    const isBoletoMode = selectedAccountId === 'boleto';
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
             {isScannerOpen && <ScannerModal onClose={() => setIsScannerOpen(false)} onScan={handleScan} />}
             
+            <NotificationModal 
+                isOpen={notification.isOpen} 
+                type={notification.type} 
+                message={notification.message} 
+                onClose={() => setNotification({ ...notification, isOpen: false })} 
+            />
+
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -355,7 +462,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    {/* Supplier Info - Reordered */}
+                    {/* Supplier Info */}
                     <div className="space-y-4">
                         <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 pb-2">Fornecedor</h3>
                         <div className="grid grid-cols-2 gap-2">
@@ -399,38 +506,103 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                         <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 pb-2">Pagamento</h3>
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="block text-sm font-medium mb-1">Status</label>
+                                <label className="block text-sm font-medium mb-1">Status <span className="text-red-500">*</span></label>
                                 <select 
                                     value={status} 
-                                    onChange={e => setStatus(e.target.value as TransactionStatus)} 
-                                    className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600"
+                                    onChange={e => {
+                                        setStatus(e.target.value as TransactionStatus | '');
+                                        setStatusError(false);
+                                        // Reset special logic if status changes
+                                        if (e.target.value === TransactionStatus.PAID && selectedAccountId === 'boleto') {
+                                            setSelectedAccountId('cash-box');
+                                        }
+                                    }} 
+                                    className={`w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border ${statusError ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                                 >
+                                    <option value="">Selecione...</option>
                                     <option value={TransactionStatus.PAID}>Pago</option>
                                     <option value={TransactionStatus.PENDING}>Pendente</option>
                                 </select>
+                                {statusError && <p className="text-xs text-red-500 mt-1">Selecione um status.</p>}
                             </div>
+                            
                             {status === TransactionStatus.PENDING ? (
                                 <div>
-                                    <label className="block text-sm font-medium mb-1">Vencimento</label>
+                                    <label className="block text-sm font-medium mb-1">Vencimento (1ª Parc.)</label>
                                     <input type="date" value={dueDate} onChange={e => setDueDate(e.target.value)} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" />
                                 </div>
-                            ) : (
+                            ) : status === TransactionStatus.PAID ? (
                                 <div>
                                     <label className="block text-sm font-medium mb-1">Data Pagto.</label>
-                                    <input type="date" value={paymentDate} onChange={e => setPaymentDate(e.target.value)} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" />
+                                    <input 
+                                        type="date" 
+                                        value={paymentDate} 
+                                        onChange={handlePaymentDateChange}
+                                        max={new Date().toISOString().split('T')[0]} 
+                                        className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" 
+                                    />
                                 </div>
-                            )}
+                            ) : <div className="bg-gray-100 dark:bg-gray-700 rounded w-full"></div>}
                         </div>
 
                         <div>
                             <label className="block text-sm font-medium mb-1">Conta de Saída</label>
-                            <select value={selectedAccountId} onChange={e => { setSelectedAccountId(e.target.value); setSelectedMethodId(''); }} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600">
+                            <select 
+                                value={selectedAccountId} 
+                                onChange={e => { setSelectedAccountId(e.target.value); setSelectedMethodId(''); }} 
+                                disabled={status === ''}
+                                className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 disabled:opacity-50"
+                            >
                                 <option value="cash-box">Dinheiro do Caixa</option>
-                                {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName}</option>)}
+                                {status === TransactionStatus.PENDING && (
+                                    <option value="boleto">Boleto Bancário</option>
+                                )}
+                                <optgroup label="Bancos">
+                                    {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName}</option>)}
+                                </optgroup>
                             </select>
                         </div>
 
-                        {!isCashBox && (
+                        {/* Boleto specific UI */}
+                        {isBoletoMode && (
+                            <div className="bg-yellow-50 dark:bg-yellow-900/10 p-3 rounded border border-yellow-200 dark:border-yellow-700 animate-fade-in">
+                                <div className="flex justify-between items-center mb-2">
+                                    <label className="text-sm font-bold text-yellow-800 dark:text-yellow-400">Parcelamento</label>
+                                    <select 
+                                        value={boletoInstallmentsCount} 
+                                        onChange={e => setBoletoInstallmentsCount(Number(e.target.value))}
+                                        className="text-sm rounded p-1 bg-white dark:bg-gray-800 border-yellow-300 dark:border-yellow-600"
+                                    >
+                                        {Array.from({length: 10}, (_, i) => i + 1).map(n => <option key={n} value={n}>{n}x</option>)}
+                                    </select>
+                                </div>
+                                
+                                {totalPurchaseCost > 0 && (
+                                    <div className="max-h-32 overflow-y-auto text-xs border-t border-yellow-200 dark:border-yellow-700 pt-2">
+                                        <table className="w-full text-left">
+                                            <thead>
+                                                <tr className="text-gray-500 dark:text-gray-400">
+                                                    <th>#</th>
+                                                    <th>Vencimento</th>
+                                                    <th className="text-right">Valor</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {boletoPreview.map((p) => (
+                                                    <tr key={p.number} className="border-b border-dashed border-gray-200 dark:border-gray-700/50">
+                                                        <td className="py-1">{p.number}x</td>
+                                                        <td className="py-1">{p.date.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                                        <td className="py-1 text-right font-semibold">R$ {formatCurrencyNumber(p.amount)}</td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {!isCashBox && !isBoletoMode && (
                             <div>
                                 <label className="block text-sm font-medium mb-1">Método</label>
                                 <select value={selectedMethodId} onChange={e => setSelectedMethodId(e.target.value)} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600">
@@ -444,7 +616,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
 
                         {isCredit && (
                             <div>
-                                <label className="block text-sm font-medium mb-1">Parcelas</label>
+                                <label className="block text-sm font-medium mb-1">Parcelas (Cartão)</label>
                                 <select value={installments} onChange={e => setInstallments(Number(e.target.value))} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600">
                                     {Array.from({length: 12}, (_, i) => i+1).map(n => <option key={n} value={n}>{n}x</option>)}
                                 </select>
@@ -553,7 +725,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
 
                 <div className="flex justify-end gap-3 mt-6 pt-4 border-t dark:border-gray-700">
                     <button onClick={onClose} className="px-4 py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded">Cancelar</button>
-                    <button onClick={handleSubmit} className="px-6 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700">Salvar Compra</button>
+                    <button onClick={handleSubmit} disabled={status === ''} className="px-6 py-2 bg-indigo-600 text-white font-bold rounded hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed">Salvar Compra</button>
                 </div>
             </div>
         </div>
@@ -806,4 +978,3 @@ const Purchases: React.FC<PurchasesProps> = ({ products, purchaseOrders, onAddPu
 };
 
 export default Purchases;
-
