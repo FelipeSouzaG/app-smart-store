@@ -461,10 +461,10 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                     <button onClick={onClose} className="text-gray-500 hover:text-gray-700 dark:hover:text-gray-300">✕</button>
                 </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    {/* Supplier Info */}
-                    <div className="space-y-4">
-                        <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 pb-2">Fornecedor</h3>
+                {/* 1. SEÇÃO FORNECEDOR (Topo) */}
+                <div className="mb-6 border-b dark:border-gray-700 pb-6">
+                    <h3 className="font-semibold text-gray-700 dark:text-gray-300 mb-4">1. Fornecedor</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="grid grid-cols-2 gap-2">
                             <div className="col-span-2 sm:col-span-1">
                                 <label className="block text-sm font-medium mb-1">CPF/CNPJ <span className="text-red-500">*</span></label>
@@ -500,10 +500,111 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                             </div>
                         </div>
                     </div>
+                </div>
 
-                    {/* Payment Info */}
-                    <div className="space-y-4">
-                        <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 pb-2">Pagamento</h3>
+                {/* 2. SEÇÃO ITENS DA COMPRA (Meio) */}
+                <div className="mb-6 border-b dark:border-gray-700 pb-6">
+                    <h3 className="font-semibold text-gray-700 dark:text-gray-300 mb-4">2. Itens da Compra</h3>
+                    
+                    <div className="flex gap-2 mb-4 items-end flex-wrap">
+                        <div className="flex-grow min-w-[200px] relative">
+                            <label className="block text-sm font-medium mb-1">Produto (Busca/Scan)</label>
+                            <div className="flex rounded-md shadow-sm">
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={handleSearchChange}
+                                    placeholder="Cód., Nome, Marca..."
+                                    className="block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-l-md focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setIsScannerOpen(true)}
+                                    className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-500"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M3 4a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm2 2V5h1v1H5zM3 13a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1v-3zm2 2v-1h1v1H5zM13 3a1 1 0 00-1 1v3a1 1 0 001 1h3a1 1 0 001-1V4a1 1 0 00-1-1h-3zm1 2v1h1V5h-1z" clipRule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
+                            {searchResults.length > 0 && (
+                                <ul className="absolute z-10 w-full bg-white dark:bg-gray-900 border dark:border-gray-600 rounded-md mt-1 max-h-48 overflow-y-auto shadow-lg">
+                                    {searchResults.map(product => (
+                                        <li 
+                                            key={product.id} 
+                                            onClick={() => handleSelectProduct(product)} 
+                                            className="p-2 text-sm hover:bg-indigo-500 hover:text-white cursor-pointer"
+                                        >
+                                            <p className="font-semibold">{product.name}</p>
+                                            <p className="text-xs text-gray-400">Cód: {product.barcode} | Atual: {product.stock}</p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
+                        </div>
+                        <div className="w-24">
+                            <label className="block text-sm font-medium mb-1">Qtd.</label>
+                            <input type="number" min="1" value={quantity} onChange={e => setQuantity(Number(e.target.value))} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" />
+                        </div>
+                        <div className="w-32">
+                            <label className="block text-sm font-medium mb-1">Custo Unit.</label>
+                            <input type="text" value={unitCost} onChange={e => setUnitCost(formatMoney(e.target.value))} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" placeholder="R$ 0,00" />
+                        </div>
+                        <button onClick={handleAddItem} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 h-[42px]">Add</button>
+                    </div>
+
+                    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600 mb-4">
+                        <table className="w-full text-sm text-left">
+                            <thead className="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
+                                <tr>
+                                    <th className="px-4 py-2">Produto</th>
+                                    <th className="px-4 py-2">Qtd</th>
+                                    <th className="px-4 py-2">Custo Unit.</th>
+                                    <th className="px-4 py-2">Total</th>
+                                    <th className="px-4 py-2 text-right">Ações</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {items.map((item, idx) => (
+                                    <tr key={idx} className="border-t dark:border-gray-600">
+                                        <td className="px-4 py-2">{item.productName}</td>
+                                        <td className="px-4 py-2">{item.quantity}</td>
+                                        <td className="px-4 py-2">R$ {formatCurrencyNumber(item.unitCost)}</td>
+                                        <td className="px-4 py-2">R$ {formatCurrencyNumber(item.unitCost * item.quantity)}</td>
+                                        <td className="px-4 py-2 text-right space-x-2">
+                                            <button onClick={() => handleEditItem(idx)} className="text-indigo-600 dark:text-indigo-400 hover:underline">Editar</button>
+                                            <button onClick={() => handleRemoveItem(idx)} className="text-red-500 hover:text-red-700 hover:underline">Excluir</button>
+                                        </td>
+                                    </tr>
+                                ))}
+                                {items.length === 0 && <tr><td colSpan={5} className="text-center py-4 text-gray-500">Nenhum item adicionado.</td></tr>}
+                            </tbody>
+                        </table>
+                    </div>
+
+                    {/* Totals moved inside Items Section area */}
+                    <div className="flex flex-col md:flex-row justify-between items-end bg-gray-50 dark:bg-gray-700/50 p-3 rounded-lg border border-gray-200 dark:border-gray-600">
+                        <div className="flex gap-4">
+                            <div>
+                                <label className="block text-xs font-medium mb-1">Frete (R$)</label>
+                                <input type="text" value={freightCost} onChange={e => setFreightCost(formatMoney(e.target.value))} className="w-24 p-2 rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-sm" />
+                            </div>
+                            <div>
+                                <label className="block text-xs font-medium mb-1">Outros (R$)</label>
+                                <input type="text" value={otherCost} onChange={e => setOtherCost(formatMoney(e.target.value))} className="w-24 p-2 rounded bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-sm" />
+                            </div>
+                        </div>
+                        <div className="text-right mt-2 md:mt-0">
+                            <p className="text-sm text-gray-500">Total da Compra</p>
+                            <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">R$ {formatCurrencyNumber(totalPurchaseCost)}</p>
+                        </div>
+                    </div>
+                </div>
+
+                {/* 3. SEÇÃO PAGAMENTO (Fundo) */}
+                <div className="mb-6">
+                    <h3 className="font-semibold text-gray-700 dark:text-gray-300 mb-4">3. Pagamento</h3>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div className="grid grid-cols-2 gap-2">
                             <div>
                                 <label className="block text-sm font-medium mb-1">Status <span className="text-red-500">*</span></label>
@@ -565,7 +666,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
 
                         {/* Boleto specific UI */}
                         {isBoletoMode && (
-                            <div className="bg-yellow-50 dark:bg-yellow-900/10 p-3 rounded border border-yellow-200 dark:border-yellow-700 animate-fade-in">
+                            <div className="bg-yellow-50 dark:bg-yellow-900/10 p-3 rounded border border-yellow-200 dark:border-yellow-700 animate-fade-in md:col-span-2">
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="text-sm font-bold text-yellow-800 dark:text-yellow-400">Parcelamento</label>
                                     <select 
@@ -622,104 +723,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                                 </select>
                             </div>
                         )}
-                    </div>
-                </div>
-
-                {/* Items Section */}
-                <div className="mb-6">
-                    <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 pb-2 mb-4">Itens da Compra</h3>
-                    <div className="flex gap-2 mb-4 items-end flex-wrap">
-                        <div className="flex-grow min-w-[200px] relative">
-                            <label className="block text-sm font-medium mb-1">Produto (Busca/Scan)</label>
-                            <div className="flex rounded-md shadow-sm">
-                                <input
-                                    type="text"
-                                    value={searchTerm}
-                                    onChange={handleSearchChange}
-                                    placeholder="Cód., Nome, Marca..."
-                                    className="block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-l-md focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                                />
-                                <button
-                                    type="button"
-                                    onClick={() => setIsScannerOpen(true)}
-                                    className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-500"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
-                                        <path fillRule="evenodd" d="M3 4a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm2 2V5h1v1H5zM3 13a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1v-3zm2 2v-1h1v1H5zM13 3a1 1 0 00-1 1v3a1 1 0 001 1h3a1 1 0 001-1V4a1 1 0 00-1-1h-3zm1 2v1h1V5h-1z" clipRule="evenodd" />
-                                    </svg>
-                                </button>
-                            </div>
-                            {searchResults.length > 0 && (
-                                <ul className="absolute z-10 w-full bg-white dark:bg-gray-900 border dark:border-gray-600 rounded-md mt-1 max-h-48 overflow-y-auto shadow-lg">
-                                    {searchResults.map(product => (
-                                        <li 
-                                            key={product.id} 
-                                            onClick={() => handleSelectProduct(product)} 
-                                            className="p-2 text-sm hover:bg-indigo-500 hover:text-white cursor-pointer"
-                                        >
-                                            <p className="font-semibold">{product.name}</p>
-                                            <p className="text-xs text-gray-400">Cód: {product.barcode} | Atual: {product.stock}</p>
-                                        </li>
-                                    ))}
-                                </ul>
-                            )}
-                        </div>
-                        <div className="w-24">
-                            <label className="block text-sm font-medium mb-1">Qtd.</label>
-                            <input type="number" min="1" value={quantity} onChange={e => setQuantity(Number(e.target.value))} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" />
-                        </div>
-                        <div className="w-32">
-                            <label className="block text-sm font-medium mb-1">Custo Unit.</label>
-                            <input type="text" value={unitCost} onChange={e => setUnitCost(formatMoney(e.target.value))} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" placeholder="R$ 0,00" />
-                        </div>
-                        <button onClick={handleAddItem} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 h-[42px]">Add</button>
-                    </div>
-
-                    <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
-                        <table className="w-full text-sm text-left">
-                            <thead className="bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-300">
-                                <tr>
-                                    <th className="px-4 py-2">Produto</th>
-                                    <th className="px-4 py-2">Qtd</th>
-                                    <th className="px-4 py-2">Custo Unit.</th>
-                                    <th className="px-4 py-2">Total</th>
-                                    <th className="px-4 py-2 text-right">Ações</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {items.map((item, idx) => (
-                                    <tr key={idx} className="border-t dark:border-gray-600">
-                                        <td className="px-4 py-2">{item.productName}</td>
-                                        <td className="px-4 py-2">{item.quantity}</td>
-                                        <td className="px-4 py-2">R$ {formatCurrencyNumber(item.unitCost)}</td>
-                                        <td className="px-4 py-2">R$ {formatCurrencyNumber(item.unitCost * item.quantity)}</td>
-                                        <td className="px-4 py-2 text-right space-x-2">
-                                            <button onClick={() => handleEditItem(idx)} className="text-indigo-600 dark:text-indigo-400 hover:underline">Editar</button>
-                                            <button onClick={() => handleRemoveItem(idx)} className="text-red-500 hover:text-red-700 hover:underline">Excluir</button>
-                                        </td>
-                                    </tr>
-                                ))}
-                                {items.length === 0 && <tr><td colSpan={5} className="text-center py-4 text-gray-500">Nenhum item adicionado.</td></tr>}
-                            </tbody>
-                        </table>
-                    </div>
-                </div>
-
-                {/* Footer Totals */}
-                <div className="flex flex-col md:flex-row justify-between items-end border-t dark:border-gray-700 pt-4 gap-4">
-                    <div className="flex gap-4">
-                        <div>
-                            <label className="block text-xs font-medium mb-1">Frete (R$)</label>
-                            <input type="text" value={freightCost} onChange={e => setFreightCost(formatMoney(e.target.value))} className="w-24 p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-sm" />
-                        </div>
-                        <div>
-                            <label className="block text-xs font-medium mb-1">Outros (R$)</label>
-                            <input type="text" value={otherCost} onChange={e => setOtherCost(formatMoney(e.target.value))} className="w-24 p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 text-sm" />
-                        </div>
-                    </div>
-                    <div className="text-right">
-                        <p className="text-sm text-gray-500">Total da Compra</p>
-                        <p className="text-3xl font-bold text-indigo-600 dark:text-indigo-400">R$ {formatCurrencyNumber(totalPurchaseCost)}</p>
                     </div>
                 </div>
 
@@ -978,3 +981,4 @@ const Purchases: React.FC<PurchasesProps> = ({ products, purchaseOrders, onAddPu
 };
 
 export default Purchases;
+
