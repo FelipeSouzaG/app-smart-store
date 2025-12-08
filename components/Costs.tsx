@@ -68,7 +68,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     const [description, setDescription] = useState('');
     const [amount, setAmount] = useState('');
     const [category, setCategory] = useState<TransactionCategory>(TransactionCategory.OTHER);
-    const [status, setStatus] = useState<TransactionStatus>(TransactionStatus.PENDING);
+    const [status, setStatus] = useState<TransactionStatus | ''>(''); // Changed default to empty
     
     const today = new Date().toISOString().split('T')[0];
 
@@ -78,7 +78,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     const [paymentDate, setPaymentDate] = useState(today); // Pagamento (Caixa)
     
     // Financial Config
-    const [selectedAccountId, setSelectedAccountId] = useState('');
+    const [selectedAccountId, setSelectedAccountId] = useState('cash-box');
     const [selectedMethodId, setSelectedMethodId] = useState('');
     const [installments, setInstallments] = useState(1);
     
@@ -98,9 +98,10 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
 
     // Derived Logic
     const isCashBox = selectedAccountId === 'cash-box';
+    const isBoletoAccount = selectedAccountId === 'boleto';
     const selectedAccount = useMemo(() => accounts.find(a => a.id === selectedAccountId), [accounts, selectedAccountId]);
     const selectedMethod = useMemo(() => selectedAccount?.paymentMethods.find(m => (m.id || (m as any)._id) === selectedMethodId), [selectedAccount, selectedMethodId]);
-    const isCreditCard = !isCashBox && selectedMethod?.type === 'Credit';
+    const isCreditCard = !isCashBox && !isBoletoAccount && selectedMethod?.type === 'Credit';
 
     const handleCurrencyChange = (value: string, setter: React.Dispatch<React.SetStateAction<string>>) => {
         if (value === '' || value === 'R$ ') { setter(''); return; }
@@ -121,20 +122,33 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                 type: 'error',
                 message: 'Data de pagamento não pode ser futura. Para agendamentos, utilize o status "Pendente" com a data de vencimento desejada.'
             });
-            // Don't update state if invalid
             return;
         }
         setPaymentDate(newDate);
     };
 
-    // Effect to handle Status Change -> Date Prefill
-    useEffect(() => {
-        if (status === TransactionStatus.PAID && !costToEdit) {
-            // Auto-fill dates for new Paid transactions
-            setDueDate(today);
-            setPaymentDate(today);
+    // Boleto Split Preview
+    const boletoPreview = useMemo(() => {
+        if (status !== TransactionStatus.PENDING || selectedAccountId !== 'boleto' || installments <= 1) return [];
+        const numericAmount = parseCurrency(amount);
+        if (numericAmount <= 0) return [];
+
+        const preview = [];
+        const amountPerInstallment = numericAmount / installments;
+        const baseDate = new Date(dueDate);
+
+        for (let i = 0; i < installments; i++) {
+            const instDate = new Date(baseDate);
+            instDate.setMonth(baseDate.getMonth() + i);
+            preview.push({
+                number: i + 1,
+                date: instDate,
+                amount: amountPerInstallment
+            });
         }
-    }, [status, today, costToEdit]);
+        return preview;
+    }, [status, selectedAccountId, installments, amount, dueDate]);
+
 
     useEffect(() => {
         if (costToEdit) {
@@ -147,11 +161,10 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             setDueDate(costToEdit.dueDate ? new Date(costToEdit.dueDate).toISOString().split('T')[0] : '');
             setPaymentDate(costToEdit.paymentDate ? new Date(costToEdit.paymentDate).toISOString().split('T')[0] : '');
             
-            // Handle legacy or specific IDs
-            if (costToEdit.financialAccountId === 'cash-box') {
-                setSelectedAccountId('cash-box');
+            if (costToEdit.financialAccountId === 'cash-box' || costToEdit.financialAccountId === 'boleto') {
+                setSelectedAccountId(costToEdit.financialAccountId);
             } else {
-                setSelectedAccountId(costToEdit.financialAccountId || '');
+                setSelectedAccountId(costToEdit.financialAccountId || 'cash-box');
                 setSelectedMethodId(costToEdit.paymentMethodId || '');
             }
         } else {
@@ -159,11 +172,11 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             setDescription('');
             setAmount('');
             setCategory(TransactionCategory.OTHER);
-            setStatus(TransactionStatus.PENDING);
+            setStatus(''); // Force selection
             setPurchaseDate(today);
             setDueDate(today);
             setPaymentDate(today); 
-            setSelectedAccountId('');
+            setSelectedAccountId('cash-box');
             setSelectedMethodId('');
             setInstallments(1);
         }
@@ -173,9 +186,9 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
     // Calculate Estimated Due Date for Credit Card UI feedback
     const creditCardEstimate = useMemo(() => {
         if (isCreditCard && selectedMethod && selectedMethod.closingDay && selectedMethod.dueDay) {
-            const pDate = new Date(purchaseDate);
+            const pDate = new Date(paymentDate); // Using payment/purchase date for CC simulation
             // Fix timezone offset for day calculation
-            const purchaseDay = parseInt(purchaseDate.split('-')[2]); 
+            const purchaseDay = parseInt(paymentDate.split('-')[2]); 
             
             let targetMonth = pDate.getMonth();
             let targetYear = pDate.getFullYear();
@@ -190,14 +203,14 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             return estDate.toLocaleDateString('pt-BR');
         }
         return null;
-    }, [isCreditCard, selectedMethod, purchaseDate]);
+    }, [isCreditCard, selectedMethod, paymentDate]);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
         const numericAmount = parseCurrency(amount);
         if (numericAmount <= 0) { setError('O valor deve ser um número positivo.'); return; }
         
-        // --- VALIDATION RULES --- //
+        if (status === '') { setError('Selecione um status.'); return; }
 
         // 1. Status Paid Validation
         if (status === TransactionStatus.PAID) {
@@ -211,12 +224,9 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                 return;
             }
 
-            // If NOT Credit Card (CashBox, Pix, Debit), dates are mandatory
+            // If NOT Credit Card (CashBox, Pix, Debit), payment date is mandatory
             if (!isCreditCard) {
-                if (!dueDate) { setError('Data de Vencimento é obrigatória.'); return; }
                 if (!paymentDate) { setError('Data de Pagamento é obrigatória.'); return; }
-                
-                // Double check future date on submit (redundant but safe)
                 if (paymentDate > today) {
                     setNotification({ isOpen: true, type: 'error', message: 'Data de pagamento futura não permitida.' });
                     return;
@@ -236,24 +246,25 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             amount: numericAmount,
             type: TransactionType.EXPENSE,
             category,
-            // Pass the intended status. If it's Credit Card, the backend will divert it to the CC table.
             status: status, 
             timestamp: createDateAsUTC(purchaseDate), // Competence
             financialAccountId: selectedAccountId || undefined,
-            paymentMethodId: (!isCashBox && selectedMethodId) ? selectedMethodId : undefined,
-            installments: isCreditCard ? installments : 1
+            paymentMethodId: (!isCashBox && !isBoletoAccount && selectedMethodId) ? selectedMethodId : undefined,
+            installments: (isCreditCard || isBoletoAccount) ? installments : 1
         };
 
         // --- DATE LOGIC --- //
         
         if (isCreditCard) {
-            // Backend handles due date calculation based on billing cycle. 
-            // Payment date is irrelevant for the individual CC item in Cash Flow (it goes to CC Table)
-            // But we send null/undefined to clear them if converting from Cash
+            // Backend handles CC due date. Clear fields.
             transactionPayload.dueDate = null; 
-            transactionPayload.paymentDate = null;
+            transactionPayload.paymentDate = createDateAsUTC(paymentDate); // Used as transaction date for CC
+        } else if (isBoletoAccount) {
+             // Backend handles Boleto Split. Base Due Date passed.
+             transactionPayload.dueDate = createDateAsUTC(dueDate);
+             transactionPayload.paymentDate = null;
         } else {
-            // Manual Dates (CashBox, Bank-Debit, Bank-Pix, or Pending)
+            // Manual Dates
             transactionPayload.dueDate = createDateAsUTC(dueDate);
             
             if (status === TransactionStatus.PAID) {
@@ -270,7 +281,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
         }
     };
     
-    const isSaveDisabled = !description || !amount || parseCurrency(amount) <= 0;
+    const isSaveDisabled = !description || !amount || parseCurrency(amount) <= 0 || status === '';
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50 p-4">
@@ -290,12 +301,14 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                 </div>
 
                 <form onSubmit={handleSubmit} className="space-y-5">
-                    {/* Basic Info */}
+                    
+                    {/* 1. Descrição */}
                     <div>
                         <label className="block text-sm font-medium mb-1">Descrição</label>
                         <input type="text" value={description} onChange={e => setDescription(e.target.value)} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 focus:ring-2 focus:ring-indigo-500" placeholder="Ex: Aluguel, Internet..."/>
                     </div>
                     
+                    {/* 2. Valor e Categoria */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
                             <label className="block text-sm font-medium mb-1">Valor (R$)</label>
@@ -309,75 +322,85 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                         </div>
                     </div>
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Data do Custo</label>
-                            <input 
-                                type="date" 
-                                value={purchaseDate} 
-                                onChange={e => setPurchaseDate(e.target.value)} 
-                                className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Status</label>
-                            <select 
-                                value={status} 
-                                onChange={e => {
-                                    setStatus(e.target.value as TransactionStatus);
-                                    // Reset payment selections if going back to pending
-                                    if(e.target.value === TransactionStatus.PENDING) {
-                                        setSelectedAccountId('');
-                                        setSelectedMethodId('');
-                                    }
-                                }} 
-                                className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 font-semibold"
-                            >
-                                <option value={TransactionStatus.PENDING}>🔴 Pendente (A Pagar)</option>
-                                <option value={TransactionStatus.PAID}>🟢 Pago (Realizado)</option>
-                            </select>
-                        </div>
+                    {/* 3. Status - Controls Visibility */}
+                    <div>
+                        <label className="block text-sm font-medium mb-1">Status <span className="text-red-500">*</span></label>
+                        <select 
+                            value={status} 
+                            onChange={e => {
+                                const newStatus = e.target.value as TransactionStatus | '';
+                                setStatus(newStatus);
+                                // Default account selection based on status
+                                if (newStatus === TransactionStatus.PAID) {
+                                    setSelectedAccountId('cash-box');
+                                } else if (newStatus === TransactionStatus.PENDING) {
+                                    setSelectedAccountId('cash-box');
+                                }
+                                setSelectedMethodId('');
+                            }} 
+                            className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 font-semibold"
+                        >
+                            <option value="">Selecione...</option>
+                            <option value={TransactionStatus.PENDING}>🔴 Pendente (A Pagar)</option>
+                            <option value={TransactionStatus.PAID}>🟢 Pago (Realizado)</option>
+                        </select>
                     </div>
 
-                    {/* --- DYNAMIC SECTION: BASED ON STATUS --- */}
-                    
-                    {/* SCENARIO 1: PENDING (Simple) */}
-                    {status === TransactionStatus.PENDING && (
-                        <div className="bg-yellow-50 dark:bg-yellow-900/10 p-4 rounded-lg border border-yellow-200 dark:border-yellow-800 animate-fade-in">
-                            <label className="block text-sm font-medium text-yellow-800 dark:text-yellow-500 mb-1">Data de Vencimento <span className="text-red-500">*</span></label>
-                            <input 
-                                type="date" 
-                                value={dueDate} 
-                                onChange={e => setDueDate(e.target.value)} 
-                                required
-                                className="w-full rounded-lg bg-white dark:bg-gray-800 border-yellow-300 dark:border-yellow-600 p-2.5"
-                            />
-                        </div>
-                    )}
-
-                    {/* SCENARIO 2: PAID (Complex) */}
-                    {status === TransactionStatus.PAID && (
-                        <div className="bg-green-50 dark:bg-green-900/10 p-4 rounded-lg border border-green-200 dark:border-green-800 space-y-4 animate-fade-in">
+                    {/* DYNAMIC SECTION BASED ON STATUS */}
+                    {status !== '' && (
+                        <div className={`p-4 rounded-lg border animate-fade-in ${status === TransactionStatus.PAID ? 'bg-green-50 dark:bg-green-900/10 border-green-200 dark:border-green-800' : 'bg-yellow-50 dark:bg-yellow-900/10 border-yellow-200 dark:border-yellow-800'}`}>
                             
-                            {/* Account Selection */}
-                            <div>
-                                <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Conta de Origem <span className="text-red-500">*</span></label>
-                                <select 
-                                    value={selectedAccountId} 
-                                    onChange={e => { setSelectedAccountId(e.target.value); setSelectedMethodId(''); }} 
-                                    className="w-full rounded-lg text-sm p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
-                                >
-                                    <option value="">Selecione...</option>
-                                    <option value="cash-box">💵 Dinheiro do Caixa</option>
-                                    <optgroup label="Bancos Cadastrados">
-                                        {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName}</option>)}
-                                    </optgroup>
-                                </select>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                                {/* Date Fields */}
+                                {status === TransactionStatus.PAID ? (
+                                    <div>
+                                        <label className="block text-sm font-medium text-green-800 dark:text-green-400 mb-1">Data Pagto. <span className="text-red-500">*</span></label>
+                                        <input 
+                                            type="date" 
+                                            value={paymentDate} 
+                                            onChange={handlePaymentDateChange} 
+                                            max={today}
+                                            className="w-full rounded-lg bg-white dark:bg-gray-800 border-green-300 dark:border-green-600 p-2.5"
+                                        />
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <label className="block text-sm font-medium text-yellow-800 dark:text-yellow-500 mb-1">Vencimento (1ª Parc.) <span className="text-red-500">*</span></label>
+                                        <input 
+                                            type="date" 
+                                            value={dueDate} 
+                                            onChange={e => setDueDate(e.target.value)} 
+                                            className="w-full rounded-lg bg-white dark:bg-gray-800 border-yellow-300 dark:border-yellow-600 p-2.5"
+                                        />
+                                    </div>
+                                )}
+
+                                {/* Account Selection */}
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Conta de Saída <span className="text-red-500">*</span></label>
+                                    <select 
+                                        value={selectedAccountId} 
+                                        onChange={e => { setSelectedAccountId(e.target.value); setSelectedMethodId(''); }} 
+                                        className="w-full rounded-lg p-2.5 bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600"
+                                    >
+                                        <option value="cash-box">Dinheiro do Caixa</option>
+                                        
+                                        {status === TransactionStatus.PAID && (
+                                            <optgroup label="Bancos">
+                                                {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName}</option>)}
+                                            </optgroup>
+                                        )}
+
+                                        {status === TransactionStatus.PENDING && (
+                                            <option value="boleto">Boleto Bancário</option>
+                                        )}
+                                    </select>
+                                </div>
                             </div>
 
-                            {/* SUB-SCENARIO 2A: Bank Selected (Not Cash Box) */}
-                            {!isCashBox && selectedAccountId && (
-                                <div>
+                            {/* Sub-Logic: Paid + Bank => Method Selection */}
+                            {status === TransactionStatus.PAID && !isCashBox && (
+                                <div className="mb-4">
                                     <label className="block text-xs font-bold text-gray-500 uppercase mb-1">Forma de Pagto (Banco) <span className="text-red-500">*</span></label>
                                     <select 
                                         value={selectedMethodId} 
@@ -385,7 +408,6 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                                         className="w-full rounded-lg text-sm p-2.5 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600"
                                     >
                                         <option value="">Selecione...</option>
-                                        {/* Robust handling for ID vs _id */}
                                         {selectedAccount?.paymentMethods.map(m => (
                                             <option key={m.id || (m as any)._id} value={m.id || (m as any)._id}>
                                                 {m.name} ({m.type})
@@ -395,11 +417,13 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                                 </div>
                             )}
 
-                            {/* SUB-SCENARIO 2B: Credit Card Logic */}
-                            {isCreditCard && (
-                                <div className="p-3 bg-white dark:bg-gray-800 rounded border border-indigo-200 dark:border-indigo-800 shadow-sm animate-fade-in">
+                            {/* Sub-Logic: Installments (Credit Card OR Pending Boleto) */}
+                            {(isCreditCard || (status === TransactionStatus.PENDING && isBoletoAccount)) && (
+                                <div className="p-3 bg-white dark:bg-gray-800 rounded border shadow-sm animate-fade-in">
                                     <div className="flex justify-between items-center mb-2">
-                                        <label className="text-sm font-bold text-indigo-600 dark:text-indigo-400">Parcelamento</label>
+                                        <label className="text-sm font-bold text-indigo-600 dark:text-indigo-400">
+                                            {isCreditCard ? "Parcelas (Cartão)" : "Parcelas (Boleto)"}
+                                        </label>
                                         <select 
                                             value={installments} 
                                             onChange={e => setInstallments(parseInt(e.target.value))}
@@ -410,35 +434,30 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                                             ))}
                                         </select>
                                     </div>
-                                    <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
-                                        <p>📅 <strong>Vencimento da Fatura:</strong> {creditCardEstimate || 'Calculando...'}</p>
-                                        <p className="text-orange-500 font-medium">ℹ️ O custo será registrado na tabela do Cartão e o status seguirá a fatura.</p>
-                                    </div>
-                                </div>
-                            )}
+                                    
+                                    {isCreditCard && (
+                                        <div className="text-xs text-gray-500 dark:text-gray-400 space-y-1">
+                                            <p>📅 <strong>Vencimento da Fatura:</strong> {creditCardEstimate || 'Calculando...'}</p>
+                                            <p className="text-orange-500 font-medium">ℹ️ Registrado na tabela do Cartão.</p>
+                                        </div>
+                                    )}
 
-                            {/* SUB-SCENARIO 2C: Immediate Payment (Cash Box OR Debit/Pix) */}
-                            {((isCashBox) || (!isCreditCard && selectedMethodId)) && (
-                                <div className="grid grid-cols-2 gap-4 animate-fade-in">
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1">Vencimento Original <span className="text-red-500">*</span></label>
-                                        <input 
-                                            type="date" 
-                                            value={dueDate} 
-                                            onChange={e => setDueDate(e.target.value)} 
-                                            className="w-full rounded-lg bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 p-2.5"
-                                        />
-                                    </div>
-                                    <div>
-                                        <label className="block text-sm font-medium mb-1 text-green-600 dark:text-green-400">Data do Pagamento <span className="text-red-500">*</span></label>
-                                        <input 
-                                            type="date" 
-                                            value={paymentDate} 
-                                            onChange={handlePaymentDateChange} 
-                                            max={today}
-                                            className="w-full rounded-lg bg-white dark:bg-gray-800 border-green-300 dark:border-green-600 p-2.5 ring-1 ring-green-100"
-                                        />
-                                    </div>
+                                    {isBoletoAccount && installments > 1 && (
+                                        <div className="max-h-24 overflow-y-auto text-xs border-t border-gray-200 mt-2 pt-2">
+                                            <table className="w-full text-left">
+                                                <thead><tr><th>#</th><th>Vencimento</th><th className="text-right">Valor</th></tr></thead>
+                                                <tbody>
+                                                    {boletoPreview.map(p => (
+                                                        <tr key={p.number}>
+                                                            <td>{p.number}x</td>
+                                                            <td>{p.date.toLocaleDateString('pt-BR', { timeZone: 'UTC' })}</td>
+                                                            <td className="text-right">R$ {formatCurrencyNumber(p.amount)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
                                 </div>
                             )}
                         </div>
@@ -560,6 +579,25 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
         setEditingCost(null);
     }
 
+    // Helper for table display
+    const getAccountLabel = (t: CashTransaction) => {
+        if (t.financialAccountId === 'cash-box') {
+            return t.status === TransactionStatus.PAID ? 'Pago - Caixa' : 'Pendente - Caixa';
+        }
+        if (t.financialAccountId === 'boleto') return 'Pendente - Boleto';
+        
+        if (t.financialAccountId) {
+            const acc = accounts.find(a => a.id === t.financialAccountId);
+            if (acc) {
+                const method = acc.paymentMethods.find(m => (m.id || (m as any)._id) === t.paymentMethodId);
+                // Simple Payment
+                if (method) return `Pago - ${acc.bankName} (${method.type})`;
+                return `Pago - ${acc.bankName}`;
+            }
+        }
+        return '-';
+    };
+
     return (
         <div className="container mx-auto">
             {isModalOpen && <CostModal costToEdit={editingCost} accounts={accounts} onClose={() => { setIsModalOpen(false); setEditingCost(null); }} onSave={handleSaveCost} />}
@@ -613,27 +651,20 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                 <th scope="col" className="px-6 py-3">Categoria</th>
                                 <th scope="col" className="px-6 py-3">Valor</th>
                                 <th scope="col" className="px-6 py-3">Status</th>
-                                <th scope="col" className="px-6 py-3">Compra</th>
-                                <th scope="col" className="px-6 py-3">Vencimento</th>
-                                <th scope="col" className="px-6 py-3">Pagamento</th>
+                                <th scope="col" className="px-6 py-3">Data</th>
+                                <th scope="col" className="px-6 py-3">Conta / Forma</th>
                                 <th scope="col" className="px-6 py-3">Ações</th>
                             </tr>
                         </thead>
                         <tbody>
                              {currentRecords.length === 0 ? (
                                 <tr>
-                                    <td colSpan={8} className="text-center py-8 text-gray-500">Nenhum custo encontrado.</td>
+                                    <td colSpan={7} className="text-center py-8 text-gray-500">Nenhum custo encontrado.</td>
                                 </tr>
                              ) : (
                                 currentRecords.map(t => {
-                                    const today = new Date().setHours(0,0,0,0);
-                                    const dueDateObj = t.dueDate ? new Date(t.dueDate) : null;
-                                    const paymentDateObj = t.paymentDate ? new Date(t.paymentDate) : null;
                                     const isInvoice = (t as any).isInvoice;
                                     
-                                    const isLatePending = t.status === TransactionStatus.PENDING && dueDateObj && dueDateObj.getTime() < today;
-                                    const isPaidLate = t.status === TransactionStatus.PAID && paymentDateObj && dueDateObj && paymentDateObj.getTime() > dueDateObj.getTime();
-
                                     return (
                                     <tr key={t.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
                                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
@@ -657,24 +688,17 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                                 }`}>{t.status}</span>
                                             )}
                                         </td>
-                                        <td className="px-6 py-4">{formatDateUTC(t.timestamp)}</td>
                                         
                                         <td className="px-6 py-4">
-                                            {t.dueDate ? (
-                                                <div className={isLatePending ? "text-red-500 font-bold" : ""}>
-                                                    {formatDateUTC(t.dueDate)}
-                                                    {isLatePending && <span className="block text-[10px] uppercase">Vencido</span>}
-                                                </div>
-                                            ) : '-'}
+                                            {/* Show Due Date for Pending, Payment Date for Paid */}
+                                            {t.status === TransactionStatus.PENDING 
+                                                ? (t.dueDate ? formatDateUTC(t.dueDate) : '-') 
+                                                : (t.paymentDate ? formatDateUTC(t.paymentDate) : '-')
+                                            }
                                         </td>
 
-                                        <td className={`px-6 py-4 font-medium ${isPaidLate ? "text-red-500 font-bold" : "text-green-600"}`}>
-                                            {t.status === TransactionStatus.PAID && t.paymentDate ? (
-                                                <div>
-                                                    {formatDateUTC(t.paymentDate)}
-                                                    {isPaidLate && <span className="block text-[10px] uppercase text-red-500">Atraso</span>}
-                                                </div>
-                                            ) : '-'}
+                                        <td className="px-6 py-4 text-xs font-medium">
+                                            {getAccountLabel(t)}
                                         </td>
 
                                         <td className="px-6 py-4 whitespace-nowrap">
