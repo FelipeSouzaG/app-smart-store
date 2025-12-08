@@ -188,6 +188,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             // Map payment details
             const pd = purchaseToEdit.paymentDetails as any;
             
+            // Logic to restore state from edit
             if (pd.method === PaymentMethod.BANK_SLIP) {
                 setStatus(TransactionStatus.PENDING);
                 setSelectedAccountId('boleto');
@@ -209,14 +210,16 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                     setPaymentDate(new Date(pd.paymentDate).toISOString().split('T')[0]);
                 } else if (pd.installments && pd.installments.length > 0) {
                     // Logic for Credit card or other pending logic if applicable
-                    setStatus(TransactionStatus.PENDING);
-                    setDueDate(new Date(pd.installments[0].dueDate).toISOString().split('T')[0]);
+                    setStatus(TransactionStatus.PENDING); // Or PAID depending on how you view Credit Card
+                    // But in this logic, we use status to determine UI.
+                    // If it was credit card, it's technically "Paid" to supplier, but "Pending" in user finance (Invoice).
+                    // Usually purchases via CC are considered PAID in PurchaseOrder but generate CC Transaction.
+                    setStatus(TransactionStatus.PAID); 
                 } else if (pd.method === PaymentMethod.CREDIT_CARD) {
-                     // For credit card displayed as pending usually
-                     setStatus(TransactionStatus.PENDING);
-                } else {
-                     // Default fallback
                      setStatus(TransactionStatus.PAID);
+                } else {
+                     // Default fallback, try to infer from data
+                     setStatus(pd.paymentDate ? TransactionStatus.PAID : TransactionStatus.PENDING);
                 }
                 
                 if (pd.method) setPaymentMethod(pd.method);
@@ -261,7 +264,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                 type: 'error',
                 message: 'Para status "Pago", a data não pode ser futura. Se deseja agendar, altere o status para "Pendente" e defina o Vencimento.'
             });
-            // Reset to today or keep old? Resetting to today is safer UX
+            // Reset to today
             setPaymentDate(today);
             return;
         }
@@ -611,12 +614,14 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                                 <select 
                                     value={status} 
                                     onChange={e => {
-                                        setStatus(e.target.value as TransactionStatus | '');
+                                        const newStatus = e.target.value as TransactionStatus | '';
+                                        setStatus(newStatus);
                                         setStatusError(false);
                                         // Reset special logic if status changes
-                                        if (e.target.value === TransactionStatus.PAID && selectedAccountId === 'boleto') {
-                                            setSelectedAccountId('cash-box');
-                                        }
+                                        // If PENDING, default to cash-box, reset method
+                                        // If PAID, default to cash-box, reset method
+                                        setSelectedAccountId('cash-box');
+                                        setSelectedMethodId('');
                                     }} 
                                     className={`w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border ${statusError ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300 dark:border-gray-600'}`}
                                 >
@@ -646,26 +651,31 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                             ) : <div className="bg-gray-100 dark:bg-gray-700 rounded w-full"></div>}
                         </div>
 
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Conta de Saída</label>
-                            <select 
-                                value={selectedAccountId} 
-                                onChange={e => { setSelectedAccountId(e.target.value); setSelectedMethodId(''); }} 
-                                disabled={status === ''}
-                                className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600 disabled:opacity-50"
-                            >
-                                <option value="cash-box">Dinheiro do Caixa</option>
-                                {status === TransactionStatus.PENDING && (
-                                    <option value="boleto">Boleto Bancário</option>
-                                )}
-                                <optgroup label="Bancos">
-                                    {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName}</option>)}
-                                </optgroup>
-                            </select>
-                        </div>
+                        {status !== '' && (
+                            <div>
+                                <label className="block text-sm font-medium mb-1">Conta de Saída</label>
+                                <select 
+                                    value={selectedAccountId} 
+                                    onChange={e => { setSelectedAccountId(e.target.value); setSelectedMethodId(''); }} 
+                                    className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600"
+                                >
+                                    <option value="cash-box">Dinheiro do Caixa</option>
+                                    
+                                    {status === TransactionStatus.PENDING && (
+                                        <option value="boleto">Boleto Bancário</option>
+                                    )}
+                                    
+                                    {status === TransactionStatus.PAID && (
+                                        <optgroup label="Bancos">
+                                            {accounts.map(acc => <option key={acc.id} value={acc.id}>{acc.bankName}</option>)}
+                                        </optgroup>
+                                    )}
+                                </select>
+                            </div>
+                        )}
 
                         {/* Boleto specific UI */}
-                        {isBoletoMode && (
+                        {isBoletoMode && status === TransactionStatus.PENDING && (
                             <div className="bg-yellow-50 dark:bg-yellow-900/10 p-3 rounded border border-yellow-200 dark:border-yellow-700 animate-fade-in md:col-span-2">
                                 <div className="flex justify-between items-center mb-2">
                                     <label className="text-sm font-bold text-yellow-800 dark:text-yellow-400">Parcelamento</label>
@@ -703,7 +713,8 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                             </div>
                         )}
 
-                        {!isCashBox && !isBoletoMode && (
+                        {/* Method Selection for Paid Banks */}
+                        {!isCashBox && !isBoletoMode && status === TransactionStatus.PAID && (
                             <div>
                                 <label className="block text-sm font-medium mb-1">Método</label>
                                 <select value={selectedMethodId} onChange={e => setSelectedMethodId(e.target.value)} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600">
@@ -784,23 +795,29 @@ const Purchases: React.FC<PurchasesProps> = ({ products, purchaseOrders, onAddPu
 
     // Helpers
     const getPaymentLabel = (pd: any) => {
-        if (pd.financialAccountId === 'cash-box') return 'Dinheiro do Caixa';
+        if (pd.financialAccountId === 'cash-box') return 'Pago - Caixa';
         
         if (pd.financialAccountId) {
             const acc = accounts.find(a => a.id === pd.financialAccountId);
             if (acc) {
                 const method = acc.paymentMethods.find(m => (m.id || (m as any)._id) === pd.paymentMethodId);
-                if (method) return `${acc.bankName} - ${method.name}`;
-                return acc.bankName;
+                // Status Paid - Bank (Type)
+                // If it's a credit card transaction, it might be Pending in terms of invoice, but purchase is done.
+                if (method) return `Pago - ${acc.bankName} (${method.type})`;
+                return `Pago - ${acc.bankName}`;
             }
         }
-        if (pd.method === PaymentMethod.BANK_SLIP) return 'Boleto (Pendente)';
+        
+        if (pd.method === PaymentMethod.BANK_SLIP) return 'Pendente - Boleto';
+        
+        // If pending and no special account
+        if (pd.paymentDate === null) return 'Pendente - Caixa';
+        
         return pd.method;
     };
 
     const getBadgeStyle = (pd: any) => {
-        if (pd.financialAccountId) return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300';
-        if (pd.method === PaymentMethod.BANK_SLIP) return 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300';
+        if (pd.method === PaymentMethod.BANK_SLIP || pd.paymentDate === null) return 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-300';
         return 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-300';
     };
 
