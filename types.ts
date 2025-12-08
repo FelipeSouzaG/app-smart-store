@@ -1,3 +1,4 @@
+
 // This file is now used by both frontend and backend (in dev) for type consistency.
 
 export enum UserRole {
@@ -128,6 +129,14 @@ export enum TransactionCategory {
   OTHER = 'Outros',
 }
 
+export interface CashTransactionInstallment {
+  number: number;
+  amount: number;
+  dueDate: Date;
+  status: TransactionStatus;
+  paymentDate?: Date;
+}
+
 export interface CashTransaction {
   id: string;
   description: string;
@@ -144,6 +153,7 @@ export interface CashTransaction {
   // NEW: Linked Financial Info
   financialAccountId?: string;
   paymentMethodId?: string;
+  installments?: CashTransactionInstallment[];
 }
 
 export enum ServiceOrderStatus {
