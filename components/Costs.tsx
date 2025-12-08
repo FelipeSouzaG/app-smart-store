@@ -153,7 +153,9 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
 
     useEffect(() => {
         if (costToEdit) {
-            setDescription(costToEdit.description);
+            // Strip installment info from description for editing if present
+            const cleanDesc = costToEdit.description.replace(/\s\(\d+\/\d+\)$/, '');
+            setDescription(cleanDesc);
             setAmount(formatMoney((costToEdit.amount * 100).toFixed(0)));
             setCategory(costToEdit.category);
             
@@ -582,21 +584,36 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
 
     const combinedCosts = useMemo(() => {
         // 1. Process Cash Transactions (Expenses only, Exclude Invoices)
-        // Only include those that are parents (with installments) OR standard single records
         const cashExpenses = transactions.filter(t => 
             t.type === TransactionType.EXPENSE && 
             !(t as any).isInvoice
         );
 
-        // 2. Process Credit Card Transactions (All are Expenses)
-        const creditExpenses = creditCardTransactions.map(t => ({
-            ...t,
-            id: t.id, // Ensure ID is present
-            type: TransactionType.EXPENSE,
-            status: TransactionStatus.PAID, // Visually treated as paid via CC, though technically debt
-            paymentDate: t.timestamp, // Use purchase date as payment date equivalent for sorting
-            isCreditCard: true
-        }));
+        // 2. Process Credit Card Transactions
+        // We need to GROUP them by referenceId to show a single "Parent" record in the list
+        // Filter out automatic ones (source='purchase' or 'service_order') unless we want them here. 
+        // User requested "Manual Costs" view usually implies manual entries.
+        const manualCC = creditCardTransactions.filter(t => t.source === 'manual');
+        
+        const groupedCC: {[key: string]: any} = {};
+        
+        manualCC.forEach(t => {
+            const key = t.referenceId || t.id; // Use referenceId for grouping, fallback to id
+            if (!groupedCC[key]) {
+                groupedCC[key] = {
+                    ...t,
+                    id: key, // Use referenceId as the main ID for editing/deleting the group
+                    amount: 0,
+                    totalInstallments: t.totalInstallments,
+                    isCreditCard: true,
+                    status: TransactionStatus.PAID,
+                    paymentDate: t.timestamp
+                };
+            }
+            groupedCC[key].amount += t.amount;
+        });
+        
+        const creditExpenses = Object.values(groupedCC);
 
         // 3. Merge
         const all = [...cashExpenses, ...creditExpenses];
@@ -612,15 +629,12 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
      const filteredCosts = useMemo(() => {
         let result = combinedCosts;
         
-        // Exclude Automatic System Costs from Main View to reduce clutter if desired, 
-        // but user requested "All Costs", so we keep them unless filtered by category.
         const excludedCategories = [TransactionCategory.PRODUCT_PURCHASE, TransactionCategory.SERVICE_COST, TransactionCategory.SALES_REVENUE, TransactionCategory.SERVICE_REVENUE];
         result = result.filter(t => !excludedCategories.includes(t.category));
 
         if (competency) {
             const [year, month] = competency.split('-').map(Number);
             result = result.filter(t => {
-                // Use timestamp (Competence Date) for filtering costs
                 const refDate = new Date(t.timestamp);
                 return refDate.getUTCFullYear() === year && (refDate.getUTCMonth() + 1) === month;
             });
@@ -634,7 +648,6 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
             if (statusFilter === 'Credit') {
                  result = result.filter(t => (t as any).isCreditCard);
             } else {
-                 // For Cash Transactions, match status. For CC, ignore unless we add a specific filter
                  result = result.filter(t => !(t as any).isCreditCard && t.status === statusFilter);
             }
         }
@@ -730,13 +743,15 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
                              ) : (
                                 currentRecords.map(t => {
                                     const isCC = (t as any).isCreditCard;
+                                    // Clean description for CC group (remove 1/X) if present
+                                    const displayName = isCC ? t.description.replace(/\s\(\d+\/\d+\)$/, '') : t.description;
                                     
                                     return (
                                     <tr key={t.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
                                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                                            {t.description}
-                                            {isCC && (t as any).totalInstallments > 1 && (
-                                                <span className="ml-1 text-xs text-gray-500">({(t as any).installmentNumber}/{(t as any).totalInstallments})</span>
+                                            {displayName}
+                                            {isCC && (
+                                                <span className="ml-1 text-xs text-gray-500 block">({(t as any).totalInstallments}x Parcelas)</span>
                                             )}
                                         </td>
                                         <td className="px-6 py-4">{t.category}</td>
@@ -788,4 +803,3 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
 }
 
 export default Costs;
-
