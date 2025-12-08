@@ -166,11 +166,9 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             }
             
             // Map Dates
-            // For CC: Timestamp is purchase date. There is no direct "paymentDate" in object, use timestamp.
             setPurchaseDate(costToEdit.timestamp ? new Date(costToEdit.timestamp).toISOString().split('T')[0] : today);
             
             if (costToEdit.isCreditCard) {
-                // For CC editing, we set paymentDate input to the purchase date so it shows up
                 setPaymentDate(costToEdit.timestamp ? new Date(costToEdit.timestamp).toISOString().split('T')[0] : '');
                 setDueDate('');
             } else {
@@ -187,8 +185,10 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             }
             
             // Map Installments
-            if (costToEdit.totalInstallments) {
+            if (costToEdit.totalInstallments) { // Credit Card specific field
                 setInstallments(costToEdit.totalInstallments);
+            } else if (costToEdit.installments && costToEdit.installments.length > 0) { // CashTransaction array
+                setInstallments(costToEdit.installments.length);
             }
         } else {
             // Defaults for New Cost
@@ -334,7 +334,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                     {/* 2. Valor e Categoria */}
                     <div className="grid grid-cols-2 gap-4">
                         <div>
-                            <label className="block text-sm font-medium mb-1">Valor (R$)</label>
+                            <label className="block text-sm font-medium mb-1">Valor Total (R$)</label>
                             <input type="text" value={amount} onChange={e => handleCurrencyChange(e.target.value, setAmount)} className="w-full rounded-lg bg-gray-50 dark:bg-gray-700 border-gray-300 dark:border-gray-600 p-2.5 font-bold text-red-500 focus:ring-2 focus:ring-red-500"/>
                         </div>
                         <div>
@@ -565,7 +565,8 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
             return t.status === TransactionStatus.PAID ? 'Pago - Caixa' : 'Pendente - Caixa';
         }
         if (t.financialAccountId === 'boleto') {
-            return 'Pendente - Boleto';
+            const instCount = t.installments ? t.installments.length : 1;
+            return `Pendente - Boleto${instCount > 1 ? ` (${instCount}x)` : ''}`;
         }
         
         // Bank (Paid or Pending via Bank Transfer/Pix/Debit)
@@ -581,9 +582,10 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
 
     const combinedCosts = useMemo(() => {
         // 1. Process Cash Transactions (Expenses only, Exclude Invoices)
+        // Only include those that are parents (with installments) OR standard single records
         const cashExpenses = transactions.filter(t => 
             t.type === TransactionType.EXPENSE && 
-            !(t as any).isInvoice // Exclude Consolidated Invoice Records from this view
+            !(t as any).isInvoice
         );
 
         // 2. Process Credit Card Transactions (All are Expenses)
