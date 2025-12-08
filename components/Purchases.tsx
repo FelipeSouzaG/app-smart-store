@@ -1,8 +1,85 @@
 
-import React, { useState, useEffect, useMemo, useContext } from 'react';
-import { PurchaseOrder, Product, PaymentMethod, FinancialAccount, PurchaseItem, Bank, TransactionStatus } from '../types';
-import { formatCurrencyNumber, formatMoney, formatRegister, formatPhone } from '../validation';
+import React, { useState, useEffect, useMemo, useContext, useRef } from 'react';
+import { PurchaseOrder, Product, PaymentMethod, FinancialAccount, PurchaseItem, Bank, TransactionStatus, Supplier } from '../types';
+import { formatCurrencyNumber, formatMoney, formatRegister, formatPhone, validateRegister } from '../validation';
 import { AuthContext } from '../contexts/AuthContext';
+
+// Declare ZXing attached to window via CDN
+declare global {
+    interface Window {
+        ZXing: any;
+    }
+}
+
+const ScannerModal: React.FC<{ onClose: () => void; onScan: (code: string) => void }> = ({ onClose, onScan }) => {
+    const videoRef = useRef<HTMLVideoElement>(null);
+    const [error, setError] = useState<string>('');
+
+    useEffect(() => {
+        const codeReader = new window.ZXing.BrowserMultiFormatReader();
+        
+        const startScanning = async () => {
+            try {
+                await codeReader.decodeFromVideoDevice(
+                    undefined,
+                    videoRef.current,
+                    (result: any, err: any) => {
+                        if (result) {
+                            if (navigator.vibrate) navigator.vibrate(200);
+                            onScan(result.getText());
+                            codeReader.reset();
+                        }
+                    }
+                );
+            } catch (err) {
+                console.error("Error starting scanner:", err);
+                setError("Erro ao iniciar a câmera. Verifique as permissões.");
+            }
+        };
+
+        startScanning();
+
+        return () => {
+            codeReader.reset();
+        };
+    }, [onScan]);
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-[100]">
+            <div className="relative w-full max-w-lg p-4">
+                <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl overflow-hidden">
+                    <div className="p-4 text-center">
+                        <h3 className="text-lg font-semibold text-gray-900 dark:text-white">Scanner de Código de Barras</h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400">Aponte a câmera para o código</p>
+                    </div>
+                    
+                    <div className="relative aspect-[4/3] bg-black">
+                        <video 
+                            ref={videoRef} 
+                            className="w-full h-full object-cover" 
+                            style={{ transform: 'scaleX(1)' }} 
+                        />
+                        <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                            <div className="w-3/4 h-0.5 bg-red-500 animate-[pulse_2s_infinite] shadow-[0_0_8px_rgba(239,68,68,0.8)]"></div>
+                        </div>
+                        <div className="absolute inset-0 border-2 border-white/30 rounded-lg m-8 pointer-events-none"></div>
+                    </div>
+
+                    {error && <p className="text-center text-red-500 p-2 text-sm">{error}</p>}
+
+                    <div className="p-4">
+                        <button
+                            onClick={onClose}
+                            className="w-full py-3 px-4 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white font-semibold rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 transition-colors"
+                        >
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
 
 // --- PurchaseModal Component ---
 interface PurchaseModalProps {
@@ -17,18 +94,22 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
     const [accounts, setAccounts] = useState<FinancialAccount[]>([]);
     
     // Supplier Info
-    const [supplierName, setSupplierName] = useState('');
     const [supplierCnpj, setSupplierCnpj] = useState('');
+    const [reference, setReference] = useState('');
+    const [supplierName, setSupplierName] = useState('');
     const [supplierContact, setSupplierContact] = useState('');
     const [supplierPhone, setSupplierPhone] = useState('');
-    const [reference, setReference] = useState('');
+    const [isSupplierLoading, setIsSupplierLoading] = useState(false);
 
-    // Items
+    // Items Logic
     const [items, setItems] = useState<PurchaseItem[]>([]);
-    const [selectedProduct, setSelectedProduct] = useState<string>('');
+    const [selectedProductId, setSelectedProductId] = useState<string>('');
+    const [searchTerm, setSearchTerm] = useState('');
+    const [searchResults, setSearchResults] = useState<Product[]>([]);
     const [quantity, setQuantity] = useState(1);
     const [unitCost, setUnitCost] = useState('');
-
+    const [isScannerOpen, setIsScannerOpen] = useState(false);
+    
     // Costs
     const [freightCost, setFreightCost] = useState('');
     const [otherCost, setOtherCost] = useState('');
@@ -36,7 +117,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
     // Payment
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>(PaymentMethod.CASH);
     const [paymentDate, setPaymentDate] = useState(new Date().toISOString().split('T')[0]);
-    const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]); // Used if pending or bank slip
+    const [dueDate, setDueDate] = useState(new Date().toISOString().split('T')[0]);
     const [selectedAccountId, setSelectedAccountId] = useState('cash-box');
     const [selectedMethodId, setSelectedMethodId] = useState('');
     const [installments, setInstallments] = useState(1);
@@ -71,16 +152,112 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             }
             if (pd.method) setPaymentMethod(pd.method);
             
-            // Try to set dates if available
-            // Note: PurchaseOrder type might be simpler in frontend vs backend, assuming backend structure:
-            // For editing, we might simplify or just allow editing non-financial fields if complicated.
-            // For now, we populate what we can.
+            // Status and Dates
+            // Assuming the parent component passes the correct status if stored, or infer
+            // Since PurchaseOrder schema stores payment details but not flat status, we might need to infer
+            // But for simplicity, default to PAID if date exists, else PENDING.
+            if (pd.paymentDate) {
+                setStatus(TransactionStatus.PAID);
+                setPaymentDate(new Date(pd.paymentDate).toISOString().split('T')[0]);
+            } else if (pd.installments && pd.installments.length > 0) {
+                setStatus(TransactionStatus.PENDING);
+                setDueDate(new Date(pd.installments[0].dueDate).toISOString().split('T')[0]);
+            }
         }
     }, [purchaseToEdit]);
 
+    // Supplier Lookup Function
+    const handleCnpjBlur = async () => {
+        const cleanCnpj = supplierCnpj.replace(/\D/g, '');
+        if (!cleanCnpj) return;
+
+        if (validateRegister(supplierCnpj)) {
+            setIsSupplierLoading(true);
+            try {
+                // Try to find supplier by ID (CNPJ/CPF acts as ID in many routes or we use the specific endpoint)
+                // The route `GET /api/suppliers/:identifier` handles CNPJ lookup
+                const supplier: Supplier | null = await apiCall(`suppliers/${cleanCnpj}`, 'GET');
+                
+                if (supplier) {
+                    setSupplierName(supplier.name);
+                    setSupplierContact(supplier.contactPerson || '');
+                    setSupplierPhone(formatPhone(supplier.phone));
+                }
+                // If not found, user continues filling to create new
+            } catch (err) {
+                console.error("Error fetching supplier:", err);
+            } finally {
+                setIsSupplierLoading(false);
+            }
+        }
+    };
+
+    // Product Search Logic
+    const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setSearchTerm(value);
+        setSelectedProductId('');
+
+        if (value.length < 1) {
+            setSearchResults([]);
+            return;
+        }
+
+        const lowerCaseValue = value.toLowerCase();
+        const results = products.filter(p => 
+            p.name.toLowerCase().includes(lowerCaseValue) ||
+            p.barcode.toLowerCase().includes(lowerCaseValue) ||
+            p.brand.toLowerCase().includes(lowerCaseValue) ||
+            p.model.toLowerCase().includes(lowerCaseValue) ||
+            p.category.toLowerCase().includes(lowerCaseValue) ||
+            (p.location && p.location.toLowerCase().includes(lowerCaseValue))
+        );
+        setSearchResults(results);
+    };
+
+    const handleSelectProduct = (product: Product) => {
+        setSelectedProductId(product.id);
+        setSearchTerm(product.name);
+        setSearchResults([]);
+        setQuantity(1);
+        setUnitCost(formatMoney((product.cost * 100).toFixed(0))); // Suggest current cost
+    };
+
+    const handleScan = (code: string) => {
+        setIsScannerOpen(false);
+        const product = products.find(p => p.barcode === code || p.id === code);
+        if (product) {
+            handleSelectProduct(product);
+        } else {
+            alert(`Produto com código "${code}" não encontrado.`);
+        }
+    };
+
     const handleAddItem = () => {
-        if (!selectedProduct || quantity <= 0) return;
-        const prod = products.find(p => p.id === selectedProduct);
+        if (!selectedProductId || quantity <= 0) {
+            // If user typed a barcode directly and didn't select from list
+            const directProduct = products.find(p => p.barcode === searchTerm || p.id === searchTerm);
+            if (directProduct) {
+                setSelectedProductId(directProduct.id);
+                // Proceed with adding
+                const numericCost = parseFloat(unitCost.replace('R$ ', '').replace(/\./g, '').replace(',', '.')) || 0;
+                const newItem: PurchaseItem = {
+                    productId: directProduct.id,
+                    productName: directProduct.name,
+                    quantity: quantity,
+                    unitCost: numericCost
+                };
+                setItems([...items, newItem]);
+                setSearchTerm('');
+                setSelectedProductId('');
+                setQuantity(1);
+                setUnitCost('');
+                return;
+            }
+            return alert("Selecione um produto válido.");
+        }
+
+        const prod = products.find(p => p.id === selectedProductId);
         if (!prod) return;
 
         const numericCost = parseFloat(unitCost.replace('R$ ', '').replace(/\./g, '').replace(',', '.')) || 0;
@@ -93,9 +270,27 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
         };
 
         setItems([...items, newItem]);
-        setSelectedProduct('');
+        
+        // Reset Item Fields
+        setSearchTerm('');
+        setSelectedProductId('');
         setQuantity(1);
         setUnitCost('');
+    };
+
+    const handleEditItem = (index: number) => {
+        const itemToEdit = items[index];
+        
+        // Remove from list
+        const newItems = [...items];
+        newItems.splice(index, 1);
+        setItems(newItems);
+
+        // Populate fields
+        setSelectedProductId(itemToEdit.productId);
+        setSearchTerm(itemToEdit.productName);
+        setQuantity(itemToEdit.quantity);
+        setUnitCost(formatMoney((itemToEdit.unitCost * 100).toFixed(0)));
     };
 
     const handleRemoveItem = (index: number) => {
@@ -110,6 +305,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
     const handleSubmit = () => {
         if (items.length === 0) return alert("Adicione pelo menos um item.");
         if (!supplierName) return alert("Nome do fornecedor obrigatório.");
+        if (!supplierCnpj) return alert("CPF/CNPJ do fornecedor obrigatório.");
 
         const payload = {
             items,
@@ -148,6 +344,8 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50 p-4">
+            {isScannerOpen && <ScannerModal onClose={() => setIsScannerOpen(false)} onScan={handleScan} />}
+            
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-4xl max-h-[90vh] overflow-y-auto p-6">
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white">
@@ -157,26 +355,42 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-                    {/* Supplier Info */}
+                    {/* Supplier Info - Reordered */}
                     <div className="space-y-4">
                         <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 pb-2">Fornecedor</h3>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div className="col-span-2 sm:col-span-1">
+                                <label className="block text-sm font-medium mb-1">CPF/CNPJ <span className="text-red-500">*</span></label>
+                                <div className="relative">
+                                    <input 
+                                        type="text" 
+                                        value={supplierCnpj} 
+                                        onChange={e => setSupplierCnpj(formatRegister(e.target.value))} 
+                                        onBlur={handleCnpjBlur}
+                                        className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" 
+                                        placeholder="Busca automática..."
+                                    />
+                                    {isSupplierLoading && <span className="absolute right-2 top-2 text-xs text-indigo-500 animate-pulse">Buscando...</span>}
+                                </div>
+                            </div>
+                            <div className="col-span-2 sm:col-span-1">
+                                <label className="block text-sm font-medium mb-1">Ref. Externa (NFe) <span className="text-red-500">*</span></label>
+                                <input type="text" value={reference} onChange={e => setReference(e.target.value)} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" />
+                            </div>
+                        </div>
                         <div>
-                            <label className="block text-sm font-medium mb-1">Nome / Razão Social</label>
+                            <label className="block text-sm font-medium mb-1">Nome / Razão Social <span className="text-red-500">*</span></label>
                             <input type="text" value={supplierName} onChange={e => setSupplierName(e.target.value)} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" />
                         </div>
                         <div className="grid grid-cols-2 gap-2">
                             <div>
-                                <label className="block text-sm font-medium mb-1">CPF/CNPJ</label>
-                                <input type="text" value={supplierCnpj} onChange={e => setSupplierCnpj(formatRegister(e.target.value))} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" />
+                                <label className="block text-sm font-medium mb-1">Nome do Contato</label>
+                                <input type="text" value={supplierContact} onChange={e => setSupplierContact(e.target.value)} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" placeholder="Opcional" />
                             </div>
                             <div>
                                 <label className="block text-sm font-medium mb-1">Telefone</label>
                                 <input type="text" value={supplierPhone} onChange={e => setSupplierPhone(formatPhone(e.target.value))} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" />
                             </div>
-                        </div>
-                        <div>
-                            <label className="block text-sm font-medium mb-1">Ref. Externa (NFe/Pedido)</label>
-                            <input type="text" value={reference} onChange={e => setReference(e.target.value)} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" />
                         </div>
                     </div>
 
@@ -243,12 +457,40 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                 <div className="mb-6">
                     <h3 className="font-semibold text-gray-700 dark:text-gray-300 border-b dark:border-gray-700 pb-2 mb-4">Itens da Compra</h3>
                     <div className="flex gap-2 mb-4 items-end flex-wrap">
-                        <div className="flex-grow min-w-[200px]">
-                            <label className="block text-sm font-medium mb-1">Produto</label>
-                            <select value={selectedProduct} onChange={e => setSelectedProduct(e.target.value)} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600">
-                                <option value="">Selecione um produto...</option>
-                                {products.map(p => <option key={p.id} value={p.id}>{p.name} (Estoque: {p.stock})</option>)}
-                            </select>
+                        <div className="flex-grow min-w-[200px] relative">
+                            <label className="block text-sm font-medium mb-1">Produto (Busca/Scan)</label>
+                            <div className="flex rounded-md shadow-sm">
+                                <input
+                                    type="text"
+                                    value={searchTerm}
+                                    onChange={handleSearchChange}
+                                    placeholder="Cód., Nome, Marca..."
+                                    className="block w-full px-3 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-l-md focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                                />
+                                <button
+                                    type="button"
+                                    onClick={() => setIsScannerOpen(true)}
+                                    className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-600 text-gray-500 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-500"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                                        <path fillRule="evenodd" d="M3 4a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm2 2V5h1v1H5zM3 13a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-1 1H4a1 1 0 01-1-1v-3zm2 2v-1h1v1H5zM13 3a1 1 0 00-1 1v3a1 1 0 001 1h3a1 1 0 001-1V4a1 1 0 00-1-1h-3zm1 2v1h1V5h-1z" clipRule="evenodd" />
+                                    </svg>
+                                </button>
+                            </div>
+                            {searchResults.length > 0 && (
+                                <ul className="absolute z-10 w-full bg-white dark:bg-gray-900 border dark:border-gray-600 rounded-md mt-1 max-h-48 overflow-y-auto shadow-lg">
+                                    {searchResults.map(product => (
+                                        <li 
+                                            key={product.id} 
+                                            onClick={() => handleSelectProduct(product)} 
+                                            className="p-2 text-sm hover:bg-indigo-500 hover:text-white cursor-pointer"
+                                        >
+                                            <p className="font-semibold">{product.name}</p>
+                                            <p className="text-xs text-gray-400">Cód: {product.barcode} | Atual: {product.stock}</p>
+                                        </li>
+                                    ))}
+                                </ul>
+                            )}
                         </div>
                         <div className="w-24">
                             <label className="block text-sm font-medium mb-1">Qtd.</label>
@@ -258,7 +500,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                             <label className="block text-sm font-medium mb-1">Custo Unit.</label>
                             <input type="text" value={unitCost} onChange={e => setUnitCost(formatMoney(e.target.value))} className="w-full p-2 rounded bg-gray-50 dark:bg-gray-700 border border-gray-300 dark:border-gray-600" placeholder="R$ 0,00" />
                         </div>
-                        <button onClick={handleAddItem} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Add</button>
+                        <button onClick={handleAddItem} className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 h-[42px]">Add</button>
                     </div>
 
                     <div className="bg-gray-50 dark:bg-gray-700/30 rounded-lg overflow-hidden border border-gray-200 dark:border-gray-600">
@@ -269,7 +511,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                                     <th className="px-4 py-2">Qtd</th>
                                     <th className="px-4 py-2">Custo Unit.</th>
                                     <th className="px-4 py-2">Total</th>
-                                    <th className="px-4 py-2"></th>
+                                    <th className="px-4 py-2 text-right">Ações</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -279,8 +521,9 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                                         <td className="px-4 py-2">{item.quantity}</td>
                                         <td className="px-4 py-2">R$ {formatCurrencyNumber(item.unitCost)}</td>
                                         <td className="px-4 py-2">R$ {formatCurrencyNumber(item.unitCost * item.quantity)}</td>
-                                        <td className="px-4 py-2 text-right">
-                                            <button onClick={() => handleRemoveItem(idx)} className="text-red-500 hover:text-red-700">&times;</button>
+                                        <td className="px-4 py-2 text-right space-x-2">
+                                            <button onClick={() => handleEditItem(idx)} className="text-indigo-600 dark:text-indigo-400 hover:underline">Editar</button>
+                                            <button onClick={() => handleRemoveItem(idx)} className="text-red-500 hover:text-red-700 hover:underline">Excluir</button>
                                         </td>
                                     </tr>
                                 ))}
@@ -563,3 +806,4 @@ const Purchases: React.FC<PurchasesProps> = ({ products, purchaseOrders, onAddPu
 };
 
 export default Purchases;
+
