@@ -6,6 +6,7 @@ import { AuthContext } from '../contexts/AuthContext';
 
 interface CostsProps {
     transactions: CashTransaction[];
+    creditCardTransactions?: any[]; // Allow CC items
     addTransaction: (transaction: Omit<CashTransaction, 'id' | 'timestamp'>) => void;
     updateTransaction: (transaction: CashTransaction) => void;
     deleteTransaction: (transactionId: string) => void;
@@ -490,7 +491,7 @@ const ConfirmationModal: React.FC<{ message: string; onConfirm: () => void; onCa
     </div>
 );
 
-const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTransaction, deleteTransaction }) => {
+const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = [], addTransaction, updateTransaction, deleteTransaction }) => {
     const { apiCall } = useContext(AuthContext);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingCost, setEditingCost] = useState<CashTransaction | null>(null);
@@ -514,7 +515,7 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
 
     const [competency, setCompetency] = useState<string>(getCurrentCompetency());
     const [categoryFilter, setCategoryFilter] = useState<TransactionCategory | 'All'>('All');
-    const [statusFilter, setStatusFilter] = useState<TransactionStatus | 'All'>('All');
+    const [statusFilter, setStatusFilter] = useState<TransactionStatus | 'All' | 'Credit'>('All');
     const [currentPage, setCurrentPage] = useState(1);
     const recordsPerPage = 15;
     
@@ -527,21 +528,63 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
         ].includes(cat)
     ), []);
 
-    const manualCostTransactions = useMemo(() => {
-        const excludedCategories = [TransactionCategory.PRODUCT_PURCHASE, TransactionCategory.SERVICE_COST, TransactionCategory.SALES_REVENUE, TransactionCategory.SERVICE_REVENUE];
-        return transactions
-            .filter(t => t.type === TransactionType.EXPENSE && !excludedCategories.includes(t.category))
-            .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime());
-    }, [transactions]);
+    // Helper to get Account Name
+    const getAccountName = (accId: string, methodId?: string) => {
+        if (accId === 'cash-box') return 'Dinheiro';
+        if (accId === 'boleto') return 'Boleto';
+        
+        const acc = accounts.find(a => a.id === accId);
+        if (!acc) return 'Banco';
+        
+        if (methodId) {
+            const method = acc.paymentMethods.find(m => (m.id || (m as any)._id) === methodId);
+            return `${acc.bankName} (${method?.name || 'Método'})`;
+        }
+        
+        return acc.bankName;
+    };
+
+    const combinedCosts = useMemo(() => {
+        // 1. Process Cash Transactions (Expenses only, Exclude Invoices)
+        const cashExpenses = transactions.filter(t => 
+            t.type === TransactionType.EXPENSE && 
+            !(t as any).isInvoice // Exclude Consolidated Invoice Records from this view
+        );
+
+        // 2. Process Credit Card Transactions (All are Expenses)
+        const creditExpenses = creditCardTransactions.map(t => ({
+            ...t,
+            id: t.id, // Ensure ID is present
+            type: TransactionType.EXPENSE,
+            status: 'Credit', // Internal status marker for UI
+            paymentDate: t.timestamp, // Use purchase date as payment date equivalent for sorting
+            isCreditCard: true
+        }));
+
+        // 3. Merge
+        const all = [...cashExpenses, ...creditExpenses];
+        
+        // 4. Sort
+        return all.sort((a, b) => {
+            const dateA = a.timestamp ? new Date(a.timestamp).getTime() : 0;
+            const dateB = b.timestamp ? new Date(b.timestamp).getTime() : 0;
+            return dateB - dateA;
+        });
+    }, [transactions, creditCardTransactions]);
     
      const filteredCosts = useMemo(() => {
-        let result = manualCostTransactions;
+        let result = combinedCosts;
         
+        // Exclude Automatic System Costs from Main View to reduce clutter if desired, 
+        // but user requested "All Costs", so we keep them unless filtered by category.
+        const excludedCategories = [TransactionCategory.PRODUCT_PURCHASE, TransactionCategory.SERVICE_COST, TransactionCategory.SALES_REVENUE, TransactionCategory.SERVICE_REVENUE];
+        result = result.filter(t => !excludedCategories.includes(t.category));
+
         if (competency) {
             const [year, month] = competency.split('-').map(Number);
             result = result.filter(t => {
-                // Determine which date to use for filtering. For invoices, use dueDate (billing date).
-                const refDate = t.dueDate ? new Date(t.dueDate) : new Date(t.timestamp);
+                // Use timestamp (Competence Date) for filtering costs
+                const refDate = new Date(t.timestamp);
                 return refDate.getUTCFullYear() === year && (refDate.getUTCMonth() + 1) === month;
             });
         }
@@ -551,11 +594,16 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
         }
 
         if (statusFilter !== 'All') {
-            result = result.filter(t => t.status === statusFilter);
+            if (statusFilter === 'Credit') {
+                 result = result.filter(t => (t as any).isCreditCard);
+            } else {
+                 // For Cash Transactions, match status. For CC, ignore unless we add a specific filter
+                 result = result.filter(t => !(t as any).isCreditCard && t.status === statusFilter);
+            }
         }
         
         return result;
-    }, [manualCostTransactions, competency, categoryFilter, statusFilter]);
+    }, [combinedCosts, competency, categoryFilter, statusFilter]);
 
     useEffect(() => {
         setCurrentPage(1);
@@ -578,25 +626,6 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
         setIsModalOpen(false);
         setEditingCost(null);
     }
-
-    // Helper for table display
-    const getAccountLabel = (t: CashTransaction) => {
-        if (t.financialAccountId === 'cash-box') {
-            return t.status === TransactionStatus.PAID ? 'Pago - Caixa' : 'Pendente - Caixa';
-        }
-        if (t.financialAccountId === 'boleto') return 'Pendente - Boleto';
-        
-        if (t.financialAccountId) {
-            const acc = accounts.find(a => a.id === t.financialAccountId);
-            if (acc) {
-                const method = acc.paymentMethods.find(m => (m.id || (m as any)._id) === t.paymentMethodId);
-                // Simple Payment
-                if (method) return `Pago - ${acc.bankName} (${method.type})`;
-                return `Pago - ${acc.bankName}`;
-            }
-        }
-        return '-';
-    };
 
     return (
         <div className="container mx-auto">
@@ -639,6 +668,7 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                     {Object.values(TransactionStatus).map(st => (
                          <button key={st} onClick={() => setStatusFilter(st)} className={`px-3 py-1 text-sm rounded-full ${statusFilter === st ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>{st}</button>
                     ))}
+                    <button onClick={() => setStatusFilter('Credit')} className={`px-3 py-1 text-sm rounded-full ${statusFilter === 'Credit' ? 'bg-indigo-600 text-white' : 'bg-gray-200 dark:bg-gray-700'}`}>Cartão</button>
                 </div>
             </div>
 
@@ -663,22 +693,24 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                 </tr>
                              ) : (
                                 currentRecords.map(t => {
-                                    const isInvoice = (t as any).isInvoice;
+                                    const isCC = (t as any).isCreditCard;
                                     
                                     return (
                                     <tr key={t.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
                                         <td className="px-6 py-4 font-medium text-gray-900 dark:text-white">
-                                            {isInvoice && <span className="mr-2">💳</span>}
                                             {t.description}
+                                            {isCC && (t as any).totalInstallments > 1 && (
+                                                <span className="ml-1 text-xs text-gray-500">({(t as any).installmentNumber}/{(t as any).totalInstallments})</span>
+                                            )}
                                         </td>
                                         <td className="px-6 py-4">{t.category}</td>
                                         <td className={`px-6 py-4 font-semibold text-red-500`}>
                                             - R$ {formatCurrencyNumber(t.amount)}
                                         </td>
                                         <td className="px-6 py-4">
-                                            {isInvoice ? (
+                                            {isCC ? (
                                                 <span className="px-2 py-1 text-xs font-semibold rounded-full bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-300">
-                                                    Fatura Cartão
+                                                    Cartão
                                                 </span>
                                             ) : (
                                                 <span className={`px-2 py-1 text-xs font-semibold rounded-full ${
@@ -690,25 +722,31 @@ const Costs: React.FC<CostsProps> = ({ transactions, addTransaction, updateTrans
                                         </td>
                                         
                                         <td className="px-6 py-4">
-                                            {/* Show Due Date for Pending, Payment Date for Paid */}
-                                            {t.status === TransactionStatus.PENDING 
-                                                ? (t.dueDate ? formatDateUTC(t.dueDate) : '-') 
-                                                : (t.paymentDate ? formatDateUTC(t.paymentDate) : '-')
+                                            {/* Show Due Date for Pending, Payment Date for Paid, Timestamp for CC */}
+                                            {isCC 
+                                                ? formatDateUTC(t.timestamp) 
+                                                : (t.status === TransactionStatus.PENDING 
+                                                    ? (t.dueDate ? formatDateUTC(t.dueDate) : '-') 
+                                                    : (t.paymentDate ? formatDateUTC(t.paymentDate) : '-')
+                                                )
                                             }
                                         </td>
 
                                         <td className="px-6 py-4 text-xs font-medium">
-                                            {getAccountLabel(t)}
+                                            {isCC ? getAccountName(t.financialAccountId!, t.paymentMethodId) : 
+                                             t.financialAccountId === 'cash-box' ? (t.status === TransactionStatus.PAID ? 'Pago - Caixa' : 'Pendente - Caixa') :
+                                             t.financialAccountId === 'boleto' ? 'Pendente - Boleto' :
+                                             getAccountName(t.financialAccountId!, t.paymentMethodId)}
                                         </td>
 
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            {!isInvoice && (
-                                                <>
-                                                    <button onClick={() => { setEditingCost(t); setIsModalOpen(true); }} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline mr-4">Editar</button>
-                                                    <button onClick={() => setDeletingCostId(t.id)} className="font-medium text-red-600 dark:text-red-500 hover:underline">Excluir</button>
-                                                </>
+                                            {!isCC && (
+                                                <button onClick={() => { setEditingCost(t); setIsModalOpen(true); }} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline mr-4">Editar</button>
                                             )}
-                                            {isInvoice && <span className="text-xs text-gray-400">Gerenciado via Fatura</span>}
+                                            {isCC && (
+                                                <span className="text-xs text-gray-400 mr-4 cursor-default" title="Edite no menu Financeiro">Fatura</span>
+                                            )}
+                                            <button onClick={() => setDeletingCostId(t.id)} className="font-medium text-red-600 dark:text-red-500 hover:underline">Excluir</button>
                                         </td>
                                     </tr>
                                     );
