@@ -48,6 +48,7 @@ const Layout: React.FC = () => {
     const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
     const [transactions, setTransactions] = useState<CashTransaction[]>([]);
+    const [creditTransactions, setCreditTransactions] = useState<any[]>([]); // CC Transactions for Costs View
     const [services, setServices] = useState<Service[]>([]);
     const [products, setProducts] = useState<Product[]>([]);
     const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
@@ -225,6 +226,7 @@ const Layout: React.FC = () => {
 
             if(user?.role === 'owner' || user?.role === 'manager') {
                fetchData('transactions', setTransactions);
+               fetchData('financial/statement', setCreditTransactions); // Fetch CC items
                fetchData('purchases', setPurchaseOrders);
                fetchData('sales', setTicketSales);
                fetchData('users', setUsers);
@@ -245,15 +247,24 @@ const Layout: React.FC = () => {
     // ... existing CRUD handlers ...
     const addTransaction = async (transaction: Omit<CashTransaction, 'id' | 'timestamp'>) => {
         const result = await apiCall('transactions', 'POST', transaction);
-        if (result) await fetchData('transactions', setTransactions);
+        if (result) {
+            await fetchData('transactions', setTransactions);
+            await fetchData('financial/statement', setCreditTransactions); // Refresh CC if newly added
+        }
     };
     const updateTransaction = async (updatedTransaction: CashTransaction) => {
         const result = await apiCall(`transactions/${updatedTransaction.id}`, 'PUT', updatedTransaction);
-        if (result) await fetchData('transactions', setTransactions);
+        if (result) {
+            await fetchData('transactions', setTransactions);
+            await fetchData('financial/statement', setCreditTransactions); // Refresh in case it moved to CC
+        }
     };
     const deleteTransaction = async (transactionId: string) => {
         const result = await apiCall(`transactions/${transactionId}`, 'DELETE');
-        if (result) await fetchData('transactions', setTransactions);
+        if (result) {
+            await fetchData('transactions', setTransactions);
+            await fetchData('financial/statement', setCreditTransactions); // Refresh in case it was a CC item
+        }
     };
     const updateTransactionStatus = async (transactionId: string, status: any) => {
         const transactionToUpdate = transactions.find(t => t.id === transactionId);
@@ -267,6 +278,7 @@ const Layout: React.FC = () => {
             await fetchData('purchases', setPurchaseOrders);
             await fetchData('products', setProducts);
             await fetchData('transactions', setTransactions);
+            await fetchData('financial/statement', setCreditTransactions);
             await fetchData('suppliers', setSuppliers);
         }
     };
@@ -276,6 +288,7 @@ const Layout: React.FC = () => {
             await fetchData('purchases', setPurchaseOrders);
             await fetchData('products', setProducts);
             await fetchData('transactions', setTransactions);
+            await fetchData('financial/statement', setCreditTransactions);
             await fetchData('suppliers', setSuppliers);
         }
     };
@@ -285,6 +298,7 @@ const Layout: React.FC = () => {
             await fetchData('purchases', setPurchaseOrders);
             await fetchData('products', setProducts);
             await fetchData('transactions', setTransactions);
+            await fetchData('financial/statement', setCreditTransactions);
         }
     };
     const addServiceOrder = async (orderData: any) => {
@@ -307,6 +321,7 @@ const Layout: React.FC = () => {
             await fetchData('service-orders', setServiceOrders);
             if (user?.role !== 'technician') {
                 await fetchData('transactions', setTransactions);
+                await fetchData('financial/statement', setCreditTransactions);
             }
         }
     };
@@ -316,6 +331,7 @@ const Layout: React.FC = () => {
             await fetchData('service-orders', setServiceOrders);
             if (user?.role !== 'technician') {
                 await fetchData('transactions', setTransactions);
+                await fetchData('financial/statement', setCreditTransactions);
             }
         }
         return result;
@@ -414,10 +430,9 @@ const Layout: React.FC = () => {
             case 'dashboard': return <Dashboard transactions={transactions} ticketSales={ticketSales} products={products} goals={goals} onSaveGoals={handleSaveGoals} />;
             case 'sales': return <Sales products={products} onAddSale={handleAddSale} goals={goals} />;
             case 'sales-history': return <SalesHistory ticketSales={ticketSales} onDeleteSale={handleDeleteSale} setActivePage={setActivePage} />;
-            // Pass updateTransaction to Cash so it can perform full object updates (including paymentDate)
             case 'cash': return <Cash transactions={transactions} updateTransactionStatus={updateTransactionStatus} updateTransaction={updateTransaction} />;
             case 'purchases': return <Purchases products={products} purchaseOrders={purchaseOrders} onAddPurchase={handleAddPurchase} onUpdatePurchase={updatePurchaseOrder} onDeletePurchase={deletePurchaseOrder} />;
-            case 'costs': return <Costs transactions={transactions} addTransaction={addTransaction} updateTransaction={updateTransaction} deleteTransaction={deleteTransaction} />;
+            case 'costs': return <Costs transactions={transactions} creditCardTransactions={creditTransactions} addTransaction={addTransaction} updateTransaction={updateTransaction} deleteTransaction={deleteTransaction} />;
             case 'service-orders': return <ServiceOrders services={services} serviceOrders={serviceOrders} onAddServiceOrder={addServiceOrder} onUpdateServiceOrder={updateServiceOrder} onDeleteServiceOrder={deleteServiceOrder} onToggleStatus={toggleServiceOrderStatus} setActivePage={setActivePage} goals={goals} />;
             case 'products': return <Products products={products} ticketSales={ticketSales} onAddProduct={addProduct} onUpdateProduct={(p) => updateProduct(p)} onDeleteProduct={deleteProduct} goals={goals} />;
             case 'services': return <Services services={services} onAddService={addService} onUpdateService={updateService} onDeleteService={deleteService} goals={goals} />;
@@ -520,3 +535,4 @@ const Layout: React.FC = () => {
 };
 
 export default Layout;
+
