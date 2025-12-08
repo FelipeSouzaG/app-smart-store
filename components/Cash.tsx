@@ -99,8 +99,8 @@ const Cash: React.FC<CashProps> = ({ transactions, updateTransactionStatus, upda
     };
 
     // Filter AND Expand Transactions
-    // Note: 'transactions' prop contains only CashTransaction records (Cash, Boleto, Bank Transfer, Invoice Payments).
-    // Credit Card Costs are stored in CreditCardTransaction and fetched separately for Finance/Costs views, so they don't appear here by default.
+    // If a transaction has 'installments', we check if any installment falls in the current competency.
+    // If so, we create a virtual row for display.
     const filteredTransactions = useMemo(() => {
         let result: any[] = [];
         const [compYear, compMonth] = competency ? competency.split('-').map(Number) : [0, 0];
