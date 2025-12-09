@@ -582,7 +582,10 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
                 group.installmentCount += 1;
                 group.description = t.description.replace(/\s\(\d+\/\d+\)$/, '');
             } else {
-                // Non-grouped CC (Purchases, etc, usually displayed individually or filtered out)
+                // Ignore Purchases/OS in credit card list for this view
+                if (t.source === 'purchase' || t.source === 'service_order') return;
+
+                // Non-grouped Manual CC
                 creditExpenses.push({
                     ...t,
                     id: t.id,
@@ -595,59 +598,31 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
         });
         manualGroupedCC.forEach(group => creditExpenses.push(group));
 
-        // 2. Cash Transactions (Split handling for Purchases/OS)
-        // Purchases/OS split payments result in multiple CashTransaction records with same purchaseId/serviceOrderId
-        // We want to group these into 1 visual record in Costs tab
-        const cashGrouped = new Map<string, any>();
+        // 2. Cash Transactions
+        // Filter out Purchase items and Service Order items
+        // And ensure they are expenses
         const cashStandalone: any[] = [];
 
         transactions.forEach(t => {
-            if (t.type !== TransactionType.EXPENSE || (t as any).isInvoice) return; // Skip non-expenses or invoice consolidations
-
-            const groupId = t.purchaseId || t.serviceOrderId;
+            if (t.type !== TransactionType.EXPENSE) return; 
             
-            if (groupId) {
-                // This is a child of a Purchase or OS
-                if (!cashGrouped.has(groupId)) {
-                    // Determine Origin Type for Label
-                    let originType = 'Compra';
-                    if (t.serviceOrderId) originType = 'OS';
+            // EXCLUSION LOGIC:
+            if ((t as any).isInvoice) return; // Skip invoice consolidations
+            if (t.purchaseId) return; // Skip product purchases
+            if (t.serviceOrderId) return; // Skip service order costs
+            if (t.category === TransactionCategory.PRODUCT_PURCHASE) return; // Double check category
+            if (t.category === TransactionCategory.SERVICE_COST) return; // Double check category
 
-                    cashGrouped.set(groupId, {
-                        ...t,
-                        id: groupId, // Use parent ID as virtual ID
-                        amount: 0,
-                        isGrouped: true,
-                        groupType: originType, // Marker for UI
-                        installmentCount: 0,
-                        // Consolidate status: if any pending, group is pending? or mostly paid? 
-                        // Visual logic: if mixed, show "Parcial" or "Pendente"
-                        statuses: new Set(),
-                        description: t.description.replace(/\s\(\d+\/\d+\)$/, ''), // Clean description
-                        originalDoc: t // Keep ref
-                    });
-                }
-                const group = cashGrouped.get(groupId);
-                group.amount += t.amount;
-                group.installmentCount += 1;
-                group.statuses.add(t.status);
-                // Update timestamp/dueDate to earliest/latest if needed, but keeping first found is okay for list sorting
-            } else {
-                cashStandalone.push(t);
-            }
-        });
-
-        // Finalize groups
-        const cashGroupedArray = Array.from(cashGrouped.values()).map(g => {
-            const allPaid = Array.from(g.statuses).every(s => s === TransactionStatus.PAID);
-            return {
-                ...g,
-                status: allPaid ? TransactionStatus.PAID : TransactionStatus.PENDING
-            };
+            // Handle Split Costs (Manual Boletos/Splits) that share an ID logic but are manual
+            // If it has installments array, it's a parent record (good).
+            // If it's an individual installment record from legacy logic (shouldn't happen with new logic but safe to check)
+            // Current manual logic creates 1 parent with installments array.
+            
+            cashStandalone.push(t);
         });
 
         // 3. Merge All
-        const all = [...cashStandalone, ...cashGroupedArray, ...creditExpenses];
+        const all = [...cashStandalone, ...creditExpenses];
         
         // 4. Sort
         return all.sort((a, b) => {
@@ -660,17 +635,7 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
      const filteredCosts = useMemo(() => {
         let result = combinedCosts;
         
-        // Filter out auto-system costs unless filtered explicitly
-        const excludedCategories = [TransactionCategory.PRODUCT_PURCHASE, TransactionCategory.SERVICE_COST, TransactionCategory.SALES_REVENUE, TransactionCategory.SERVICE_REVENUE];
-        // Allow seeing them if they are grouped (Purchases/OS) or explicit filter
-        if (categoryFilter === 'All') {
-             // By default, hide raw system costs unless they are our grouped representations (Purchases/OS)
-             // or manual entries.
-             // Actually, user wants to see "Costs".
-             // Let's hide individual raw parts if they are part of a group (handled by combinedCosts logic which consumes them).
-             // But valid standalone system costs (like single cash purchase) should show.
-             // So we don't aggressively filter here unless categories match.
-        } else {
+        if (categoryFilter !== 'All') {
             result = result.filter(t => t.category === categoryFilter);
         }
 
@@ -783,8 +748,6 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
                                 currentRecords.map(t => {
                                     const isCC = (t as any).isCreditCard;
                                     const isGrouped = (t as any).isGrouped;
-                                    const groupType = (t as any).groupType; // 'Compra' or 'OS'
-                                    const isSystemGroup = groupType === 'Compra' || groupType === 'OS';
                                     
                                     return (
                                     <tr key={t.id} className="bg-white dark:bg-gray-800 border-b dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-600">
@@ -833,25 +796,14 @@ const Costs: React.FC<CostsProps> = ({ transactions, creditCardTransactions = []
                                         </td>
 
                                         <td className="px-6 py-4 whitespace-nowrap">
-                                            {/* Manual Groups (CC) or Standalone entries are editable. System Groups (Purchases/OS) are NOT. */}
-                                            {(!isSystemGroup && (!isCC || isGrouped)) && (
+                                            {/* Allow editing if it's not a legacy/auto-imported credit transaction (Grouped Manuals are editable) */}
+                                            {(!isCC || isGrouped) && (
                                                 <button onClick={() => { setEditingCost(t); setIsModalOpen(true); }} className="font-medium text-indigo-600 dark:text-indigo-500 hover:underline mr-4">Editar</button>
                                             )}
-                                            
-                                            {isSystemGroup && (
-                                                <span className="text-xs text-gray-400 mr-4 cursor-default italic">
-                                                    {groupType === 'Compra' ? 'Gerenciar em Compras' : 'Gerenciar em OS'}
-                                                </span>
-                                            )}
-
                                             {isCC && !isGrouped && (
                                                 <span className="text-xs text-gray-400 mr-4 cursor-default" title="Edite no menu Financeiro">Fatura</span>
                                             )}
-                                            
-                                            {/* Delete allowed for Manual items only */}
-                                            {!isSystemGroup && (
-                                                <button onClick={() => setDeletingCostId(t.id)} className="font-medium text-red-600 dark:text-red-500 hover:underline">Excluir</button>
-                                            )}
+                                            <button onClick={() => setDeletingCostId(t.id)} className="font-medium text-red-600 dark:text-red-500 hover:underline">Excluir</button>
                                         </td>
                                     </tr>
                                     );
