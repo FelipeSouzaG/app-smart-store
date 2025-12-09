@@ -56,6 +56,7 @@ const NotificationModal: React.FC<{ isOpen: boolean; type: 'success' | 'error'; 
 
 // Date helpers
 const createDateAsUTC = (dateString: string) => {
+    if (!dateString) return new Date();
     const [year, month, day] = dateString.split('-').map(Number);
     return new Date(Date.UTC(year, month - 1, day, 12, 0, 0, 0));
 };
@@ -176,8 +177,8 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             }
             
             setPurchaseDate(costToEdit.timestamp ? new Date(costToEdit.timestamp).toISOString().split('T')[0] : today);
-            setDueDate(costToEdit.dueDate ? new Date(costToEdit.dueDate).toISOString().split('T')[0] : '');
-            setPaymentDate(costToEdit.paymentDate ? new Date(costToEdit.paymentDate).toISOString().split('T')[0] : '');
+            setDueDate(costToEdit.dueDate ? new Date(costToEdit.dueDate).toISOString().split('T')[0] : today);
+            setPaymentDate(costToEdit.paymentDate ? new Date(costToEdit.paymentDate).toISOString().split('T')[0] : today);
             
             if (costToEdit.financialAccountId === 'cash-box' || costToEdit.financialAccountId === 'boleto') {
                 setSelectedAccountId(costToEdit.financialAccountId);
@@ -282,12 +283,14 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
              transactionPayload.dueDate = createDateAsUTC(dueDate);
              transactionPayload.paymentDate = null;
         } else {
-            // Manual Dates
-            transactionPayload.dueDate = createDateAsUTC(dueDate);
-            
+            // Manual Dates - Logic for Single Payment or Pending
             if (status === TransactionStatus.PAID) {
                 transactionPayload.paymentDate = createDateAsUTC(paymentDate);
+                // FIX: Ensure dueDate exists for Paid transactions (effectively came due on payment day)
+                // This prevents "dueDate is not defined" error on backend updates
+                transactionPayload.dueDate = createDateAsUTC(paymentDate);
             } else {
+                transactionPayload.dueDate = createDateAsUTC(dueDate);
                 transactionPayload.paymentDate = null;
             }
         }
