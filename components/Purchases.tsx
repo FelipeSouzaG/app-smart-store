@@ -210,10 +210,6 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                     setPaymentDate(new Date(pd.paymentDate).toISOString().split('T')[0]);
                 } else if (pd.installments && pd.installments.length > 0) {
                     // Logic for Credit card or other pending logic if applicable
-                    setStatus(TransactionStatus.PENDING); // Or PAID depending on how you view Credit Card
-                    // But in this logic, we use status to determine UI.
-                    // If it was credit card, it's technically "Paid" to supplier, but "Pending" in user finance (Invoice).
-                    // Usually purchases via CC are considered PAID in PurchaseOrder but generate CC Transaction.
                     setStatus(TransactionStatus.PAID); 
                 } else if (pd.method === PaymentMethod.CREDIT_CARD) {
                      setStatus(TransactionStatus.PAID);
@@ -423,7 +419,7 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
                 financialAccountId: isBoleto ? undefined : selectedAccountId, // Don't send 'boleto' as account ID
                 paymentMethodId: isBoleto ? undefined : selectedMethodId,
                 paymentDate: status === TransactionStatus.PAID ? new Date(paymentDate) : null,
-                installmentCount: isCredit ? installments : 1, // Pass this to backend logic
+                installmentCount: isCredit ? installments : 1, // Pass this to backend logic for Credit Card
                 installments: isBoleto ? boletoPreview.map(p => ({
                     installmentNumber: p.number,
                     amount: p.amount,
@@ -432,8 +428,9 @@ const PurchaseModal: React.FC<PurchaseModalProps> = ({ products, purchaseToEdit,
             },
             status,
             paymentDate: status === TransactionStatus.PAID ? paymentDate : null,
-            dueDate: dueDate,
-            installments: isCredit ? installments : 1 // Credit Card logic from parent
+            // Ensure proper due date logic: If Paid, Due Date matches Payment Date
+            dueDate: status === TransactionStatus.PAID ? paymentDate : dueDate,
+            installments: isCredit ? installments : 1
         };
 
         onSave(payload);
