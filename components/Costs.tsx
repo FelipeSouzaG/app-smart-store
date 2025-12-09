@@ -269,7 +269,7 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
             timestamp: createDateAsUTC(purchaseDate), // Competence
             financialAccountId: selectedAccountId || undefined,
             paymentMethodId: (!isCashBox && !isBoletoAccount && selectedMethodId) ? selectedMethodId : undefined,
-            installments: (isCreditCard || isBoletoAccount) ? installments : 1
+            installments: (isCreditCard || isBoletoAccount) ? Math.max(1, installments) : 1
         };
 
         // --- DATE LOGIC --- //
