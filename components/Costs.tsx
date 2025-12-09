@@ -167,6 +167,12 @@ const CostModal: React.FC<CostModalProps> = ({ costToEdit, accounts, onClose, on
                 setInstallments((costToEdit as any).installmentCount || 1);
             } else {
                 setStatus(costToEdit.status);
+                // Correctly set installments for Split Boleto/Cash transactions
+                if (costToEdit.installments && costToEdit.installments.length > 0) {
+                    setInstallments(costToEdit.installments.length);
+                } else {
+                    setInstallments(1);
+                }
             }
             
             setPurchaseDate(costToEdit.timestamp ? new Date(costToEdit.timestamp).toISOString().split('T')[0] : today);
