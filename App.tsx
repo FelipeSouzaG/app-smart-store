@@ -14,11 +14,14 @@ const App: React.FC = () => {
 
     const logout = async () => {
         try {
-            // Call backend to clear cookie
             await fetch(`${API_BASE_URL}/auth/logout`, { method: 'POST', headers: { 'X-Requested-With': 'XMLHttpRequest' } });
         } catch (e) { console.error(e); }
         
-        localStorage.removeItem('token'); // Clean up legacy
+        localStorage.removeItem('token');
+        // FIX: Limpa a chave correta para re-testar o fluxo de Growth
+        sessionStorage.removeItem('growthAlertSeen');
+        sessionStorage.removeItem('googleAlertSeen'); // Limpa a legada também por garantia
+        
         setUser(null);
         setToken(null);
         window.location.href = SAAS_LOGIN_URL;
@@ -29,7 +32,6 @@ const App: React.FC = () => {
             const urlParams = new URLSearchParams(window.location.search);
             const authCode = urlParams.get('code');
             
-            // 1. Authorization Code Exchange (Secure Flow)
             if (authCode) {
                 if (processingCode.current) return;
                 processingCode.current = true;
@@ -46,8 +48,7 @@ const App: React.FC = () => {
                         const tempToken = data.token;
                         
                         if (tempToken) {
-                            // Perform Handshake with Local Backend using Bearer
-                            // The backend will set the HttpOnly cookie in response
+
                             await performHandshake(tempToken);
                             window.history.replaceState({}, document.title, window.location.pathname);
                         }
@@ -62,7 +63,7 @@ const App: React.FC = () => {
                     return;
                 }
             } else {
-                // 2. Check for existing Session (Cookie-based)
+
                 await performHandshake(null);
             }
             setIsLoading(false);
@@ -75,37 +76,35 @@ const App: React.FC = () => {
         try {
             const headers: any = {
                 'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest' // Anti-CSRF
+                'X-Requested-With': 'XMLHttpRequest'
             };
 
-            // If we have a bearer token (initial login), send it.
-            // Otherwise, we rely on the browser sending the HttpOnly cookie.
             if (bearerToken) {
                 headers['Authorization'] = `Bearer ${bearerToken}`;
             }
 
             const response = await fetch(`${API_BASE_URL}/auth/me`, {
                 headers,
-                credentials: 'include' // IMPORTANT: Send/Receive Cookies
+                credentials: 'include'
             });
 
             if (response.ok) {
                 const data = await response.json();
-                // The API now returns { user, token }
+
                 setUser(data.user);
-                // Store token in memory for SaaS API calls (which live on a different domain and can't use the cookie)
-                // AND for fallback authentication on API calls if cookies fail
+
                 if (data.token) {
                     setToken(data.token);
                 }
             } else {
                 if (bearerToken) { 
-                    // Failed even with fresh token
                     alert("Erro ao validar sessão com o servidor.");
                     logout();
                 } else {
-                    // No cookie, no token -> redirect to login
-                    window.location.href = SAAS_LOGIN_URL;
+                    // Silent fail if no token provided (initial load without session)
+                    if (response.status === 401 || response.status === 403) {
+                         window.location.href = SAAS_LOGIN_URL;
+                    }
                 }
             }
         } catch (error) {
@@ -123,18 +122,13 @@ const App: React.FC = () => {
         setUser(newUserData);
     };
 
-    // Updated API Call to use Cookies AND Header Fallback
     const apiCall = async (endpoint: string, method: string, body?: any): Promise<any | null> => {
         try {
             const headers: any = {
                 'Content-Type': 'application/json',
-                'X-Requested-With': 'XMLHttpRequest' // Anti-CSRF Header
+                'X-Requested-With': 'XMLHttpRequest'
             };
 
-            // HYBRID AUTHENTICATION:
-            // Always inject the token if we have it in memory.
-            // This is critical because cross-domain cookies (SameSite=Lax/None) can be unreliable 
-            // depending on browser settings and domain configuration (Render vs Cloudflare).
             if (token) {
                 headers['Authorization'] = `Bearer ${token}`;
             }
@@ -142,7 +136,7 @@ const App: React.FC = () => {
             const options: RequestInit = {
                 method,
                 headers,
-                credentials: 'include' // Send HttpOnly Cookies if available
+                credentials: 'include'
             };
             
             if (body) {
@@ -151,7 +145,7 @@ const App: React.FC = () => {
             const response = await fetch(`${API_BASE_URL}/${endpoint}`, options);
 
             if (response.status === 401 || response.status === 403) {
-                // Access denied or Token expired
+
                 logout();
                 return null;
             }
