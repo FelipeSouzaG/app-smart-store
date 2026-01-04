@@ -1,5 +1,11 @@
-
-// This file is now used by both frontend and backend (in dev) for type consistency.
+export interface User {
+  id: string;
+  name: string;
+  email: string;
+  role: UserRole;
+  password?: string;
+  tenantId?: string;
+}
 
 export enum UserRole {
   OWNER = 'owner',
@@ -7,18 +13,50 @@ export enum UserRole {
   TECHNICIAN = 'technician',
 }
 
-export interface User {
-  id: string; // Changed to string for MongoDB _id
+export interface Customer {
+  id: string;
   name: string;
-  email: string;
-  role: UserRole;
+  phone: string;
+  cnpjCpf?: string;
+  totalPurchases?: number;
+  totalServices?: number;
 }
 
-export enum ProductCategory {
-  CELLPHONE = 'Celular',
-  ACCESSORY = 'Acessório de Celular',
-  ELECTRONIC = 'Eletrônico',
-  OTHER = 'Outro',
+export interface Supplier {
+  id: string;
+  name: string;
+  cnpjCpf: string;
+  contactPerson?: string;
+  phone: string;
+}
+
+export interface Product {
+  id: string;
+  barcode: string;
+  name: string;
+  price: number;
+  cost: number;
+  stock: number;
+  category: string;
+  brand: string;
+  model: string;
+  location?: string;
+  lastSold?: Date | string;
+  requiresUniqueIdentifier?: boolean;
+  publishToWeb?: boolean;
+  image?: string;
+  ecommerceDetails?: {
+    priceSold: number;
+    priceCash: number;
+    installmentCount: number;
+  };
+  // UI metrics (Optional as they are computed client-side)
+  status?: ProductStatus;
+  daysOfSupply?: number;
+  turnoverRate?: number;
+  realMarginPercent?: number;
+  floorPrice?: number;
+  targetPrice?: number;
 }
 
 export enum ProductStatus {
@@ -28,81 +66,56 @@ export enum ProductStatus {
   EXCESSO = 'Excesso',
 }
 
-export interface Product {
-  id: string; // Barcode
-  barcode: string; // Explicit barcode field
-  name: string; // Usually Brand + Model
-  price: number;
-  cost: number;
-  stock: number;
-  lastSold: Date | null;
-  location?: string;
-  category: ProductCategory;
-  brand: string;
-  model: string;
-  requiresUniqueIdentifier: boolean;
-}
-
-export interface StockHistory {
-  id: string;
-  productId: string;
-  timestamp: Date;
-  user: string;
-  change: number;
-  oldStock: number;
-  newStock: number;
-  reason: string;
-}
-
-export enum ServiceBrand {
-  APPLE = 'Apple',
-  SAMSUNG = 'Samsung',
-  MOTOROLA = 'Motorola',
-  XIAOMI = 'Xiaomi',
-  OTHER = 'Outra',
+export enum ProductCategory {
+  CELLPHONE = 'Celular',
+  ACCESSORY = 'Acessório de Celular',
+  ELECTRONIC = 'Eletrônico',
+  OTHER = 'Outro',
 }
 
 export interface Service {
   id: string;
-  name: string; // This will be "Tipo de Serviço"
-  brand: string; // Changed from ServiceBrand to string to allow custom inputs
+  name: string;
+  brand: string;
   model: string;
   price: number;
   partCost: number;
   serviceCost: number;
   shippingCost: number;
+  publishToWeb?: boolean;
+  image?: string;
+  ecommerceDetails?: {
+    priceSold: number;
+    priceCash: number;
+    installmentCount: number;
+  };
 }
 
-export interface SaleItem {
-  item: Product | Service;
-  quantity: number;
-  unitPrice: number; // The price at the time of sale
-  unitCost?: number; // The cost at the time of sale (snapshot)
-  type: 'product' | 'service';
-  uniqueIdentifier?: string;
-}
-
-export interface Customer {
-  id: string; // ObjectId
-  phone: string; // Phone number is now a field
-  name: string;
-  cnpjCpf?: string;
-}
-
-export interface TicketSale {
+export interface CashTransaction {
   id: string;
-  items: SaleItem[];
-  total: number; // Final price paid
-  totalCost?: number; // Total cost of items sold
-  discount?: number; // Discount amount applied
-  paymentMethod?: string;
-  timestamp: Date;
-  customerName: string;
-  customerWhatsapp: string;
-  customerId?: string; // Link to the customer record
-  saleHour: number;
-  userId: string;
-  userName: string;
+  tenantId: string;
+  description: string;
+  amount: number;
+  type: TransactionType;
+  category: TransactionCategory | string;
+  status: TransactionStatus;
+  timestamp: Date | string;
+  dueDate?: Date | string;
+  paymentDate?: Date | string;
+  financialAccountId?: string;
+  paymentMethodId?: string;
+
+  // Links
+  serviceOrderId?: string;
+  purchaseId?: string;
+  saleId?: string;
+
+  // Invoice / Installments
+  isInvoice?: boolean;
+  invoiceStatus?: 'Open' | 'Closed';
+  installments?: any[];
+  isVirtual?: boolean;
+  installmentNumber?: number;
 }
 
 export enum TransactionStatus {
@@ -129,31 +142,52 @@ export enum TransactionCategory {
   OTHER = 'Outros',
 }
 
-export interface CashTransactionInstallment {
-  number: number;
-  amount: number;
-  dueDate: Date;
-  status: TransactionStatus;
-  paymentDate?: Date;
+export interface TicketSale {
+  id: string;
+  tenantId: string;
+  items: SaleItem[];
+  total: number;
+  totalCost: number;
+  discount: number;
+  paymentMethod: string;
+  timestamp: Date | string;
+  customerName: string;
+  customerWhatsapp: string;
+  customerId?: string;
+  saleHour: number;
+  userName: string;
+  userId: string;
 }
 
-export interface CashTransaction {
+export interface SaleItem {
+  item: Product | Service | any;
+  quantity: number;
+  unitPrice: number;
+  unitCost: number;
+  type: 'product' | 'service';
+  uniqueIdentifier?: string;
+  productName?: string;
+}
+
+export interface ServiceOrder {
   id: string;
-  description: string;
-  amount: number; // Always positive
-  type: TransactionType;
-  category: TransactionCategory;
-  status: TransactionStatus;
-  timestamp: Date;
-  dueDate?: Date;
-  paymentDate?: Date; // Data real do pagamento
-  serviceOrderId?: string; // Link to the service order
-  purchaseId?: string;
-  saleId?: string;
-  // NEW: Linked Financial Info
-  financialAccountId?: string;
-  paymentMethodId?: string;
-  installments?: CashTransactionInstallment[];
+  tenantId: string;
+  customerName: string;
+  customerWhatsapp: string;
+  customerContact?: string;
+  customerCnpjCpf?: string;
+  customerId?: string;
+  serviceId: string;
+  serviceDescription: string;
+  totalPrice: number;
+  totalCost: number;
+  otherCosts: number;
+  status: ServiceOrderStatus;
+  createdAt: Date | string;
+  completedAt?: Date | string;
+  paymentMethod?: string;
+  discount?: number;
+  finalPrice?: number;
 }
 
 export enum ServiceOrderStatus {
@@ -161,41 +195,105 @@ export enum ServiceOrderStatus {
   COMPLETED = 'Concluído',
 }
 
-export interface ServiceOrder {
+export interface PurchaseOrder {
   id: string;
-  customerName: string;
-  customerWhatsapp: string;
-  customerContact?: string;
-  customerId?: string;
-  customerCnpjCpf?: string;
-  serviceId: string;
-  serviceDescription: string;
-  totalPrice: number; // Base sale price from the selected Service
-  totalCost: number; // Cost to pay technician
-  otherCosts: number;
-  status: ServiceOrderStatus;
-  createdAt: Date;
-  completedAt?: Date;
-  // Payment Details
-  paymentMethod?: string;
-  discount?: number;
-  finalPrice?: number; // Actual amount paid
+  tenantId: string;
+  items: PurchaseItem[];
+  freightCost: number;
+  otherCost: number;
+  totalCost: number;
+  paymentDetails: PaymentDetails;
+  createdAt: Date | string;
+  supplierInfo: {
+    name: string;
+    cnpjCpf: string;
+    contactPerson: string;
+    phone: string;
+  };
+  reference: string;
+  status: TransactionStatus;
 }
 
-export enum TaxRegime {
-  INFORMAL = 'Informal',
-  MEI = 'MEI',
-  SIMPLES = 'Simples Nacional',
-  LUCRO_PRESUMIDO = 'Lucro Presumido',
-  LUCRO_REAL = 'Lucro Real',
+export interface PurchaseItem {
+  productId: string;
+  productName: string;
+  quantity: number;
+  unitCost: number;
 }
 
-export enum TurnoverPeriod {
-  MONTHLY = 'Mensal (30 dias)',
-  BIMONTHLY = 'Bimestral (60 dias)',
-  QUARTERLY = 'Trimestral (90 dias)',
-  SEMIANNUAL = 'Semestral (180 dias)',
-  ANNUAL = 'Anual (365 dias)',
+export interface PaymentDetails {
+  method: string;
+  paymentDate?: Date | string;
+  bank?: string;
+  installments?: any[];
+  installmentCount?: number;
+  financialAccountId?: string;
+  paymentMethodId?: string;
+}
+
+export enum PaymentMethod {
+  PIX = 'Pix',
+  CREDIT_CARD = 'Cartão de Crédito',
+  CREDIT_CARD_SIGHT = 'Crédito à Vista',
+  CREDIT_CARD_INSTALLMENT = 'Crédito Parcelado',
+  BANK_TRANSFER = 'Transferência Bancária',
+  CASH = 'Dinheiro',
+  DEBIT_CARD = 'Cartão de Débito',
+  BANK_SLIP = 'Boleto Bancário',
+}
+
+export interface EcommerceOrder {
+  id: string;
+  tenantId: string;
+  customer: {
+    name: string;
+    phone: string;
+    address: {
+      cep: string;
+      street: string;
+      number: string;
+      complement?: string;
+      neighborhood: string;
+      city: string;
+      state: string;
+    };
+  };
+  items: {
+    productId: string;
+    productName: string;
+    quantity: number;
+    unitPrice: number;
+    image?: string;
+    type: 'product' | 'service';
+  }[];
+  total: number;
+  status: 'PENDING' | 'SENT' | 'DELIVERED' | 'CANCELLED';
+  shippingInfo?: {
+    method?: string;
+    trackingCode?: string;
+    cost?: number;
+    shippedAt?: Date | string;
+    deliveredAt?: Date | string;
+    notes?: string;
+  };
+  createdAt: Date | string;
+  relatedTicketId?: string;
+  relatedServiceOrderId?: string;
+  relatedCustomerId?: string;
+}
+
+export interface FinancialAccount {
+  id: string;
+  bankName: string;
+  balance: number;
+  paymentMethods: PaymentMethodConfig[];
+  receivingRules: any[];
+}
+
+export interface PaymentMethodConfig {
+  id: string;
+  name: string;
+  type: string;
 }
 
 export interface CompanyAddress {
@@ -216,45 +314,79 @@ export interface CompanyInfo {
   address: CompanyAddress;
 }
 
+export interface FinancialSettings {
+  useBank: boolean;
+  useCredit: boolean;
+  cardClosingDay: number;
+  cardDueDay: number;
+}
+
+export interface StockThresholds {
+  riskMin: number;
+  riskMax: number;
+  safetyMax: number;
+}
+
 export interface KpiGoals {
-  tenantName?: string; // Slug provided by backend
-  isSetupComplete?: boolean; // Flag for first run wizard
-  // Basic Goals
-  predictedAvgMargin: number; // As a percentage, e.g., 40 for 40%
+  tenantId?: string;
+  tenantName?: string;
+  isSetupComplete: boolean;
+  predictedAvgMargin: number;
   netProfit: number;
   inventoryTurnoverGoal: number;
+  effectiveTaxRate: number;
 
-  // Strategic Pricing - Taxes (Fixed Sales Cost)
-  effectiveTaxRate: number; // User entered average
-
-  // Strategic Pricing - Fees (Variable Sales Cost)
   feePix: number;
   feeDebit: number;
   feeCreditSight: number;
-  feeCreditInstallment: number; // Key for Discount Base
+  feeCreditInstallment: number;
 
-  // Strategic Pricing - Policies
-  minContributionMargin: number; // The "Profit Lock" for Floor Price
-  fixedCostAllocation: number; // To cover OpEx (Optional usage)
-  autoApplyDiscount: boolean; // New Flag: Auto-apply discount based on fees?
+  minContributionMargin: number;
+  fixedCostAllocation: number;
+  autoApplyDiscount: boolean;
 
-  // Inventory Rules
-  turnoverPeriod: TurnoverPeriod;
+  turnoverPeriod: string;
+  stockThresholds: StockThresholds;
 
-  // Stock Thresholds (Days of Supply)
-  stockThresholds: {
-    riskMin: number; // e.g. 1 day
-    riskMax: number; // e.g. 15 days
-    safetyMax: number; // e.g. 45 days (Above this is Excess)
-  };
-
-  // Strategic Pricing - Turnover Discount Matrix (Incentives)
   discountSafety: number;
   discountRisk: number;
   discountExcess: number;
 
-  // Company Data
-  companyInfo?: CompanyInfo;
+  companyInfo: CompanyInfo;
+  financialSettings?: FinancialSettings;
+
+  googleBusiness?: {
+    status?: 'unverified' | 'verified' | 'not_found';
+    hasExternalEcommerce?: boolean;
+    websiteUri?: string;
+    mapsUri?: string;
+    dismissedPrompt?: boolean;
+    successShown?: boolean;
+  };
+
+  legalAgreement?: {
+    accepted: boolean;
+    acceptedAt?: Date;
+    version?: string;
+    ipAddress?: string;
+    userAgent?: string;
+  };
+
+  ecommercePolicies?: {
+    refundPolicy: string;
+    privacyPolicy: string;
+    shippingPolicy: string;
+    legalTerms: string;
+    configured: boolean;
+  };
+}
+
+export enum TurnoverPeriod {
+  MONTHLY = 'Mensal (30 dias)',
+  BIMONTHLY = 'Bimestral (60 dias)',
+  QUARTERLY = 'Trimestral (90 dias)',
+  SEMIANNUAL = 'Semestral (180 dias)',
+  ANNUAL = 'Anual (365 dias)',
 }
 
 export interface StockLevelSummary {
@@ -278,9 +410,9 @@ export interface SalesPeak {
 }
 
 export interface MarginMetrics {
-  activeMarginAvg: number; // Avg margin of Ruptura/Risco/Seguranca
-  activeProductPercentage: number; // % of total products that are active (not Excesso)
-  overallMarginAvg: number; // Avg margin of everything
+  activeMarginAvg: number;
+  activeProductPercentage: number;
+  overallMarginAvg: number;
 }
 
 export interface KPIs {
@@ -300,25 +432,9 @@ export interface KPIs {
   lowestTurnoverProducts: TopProduct[];
   topSalesDays: SalesPeak[];
   marginMetrics: MarginMetrics;
-}
-
-// Types for Purchase functionality
-export interface PurchaseItem {
-  productId: string;
-  productName: string;
-  quantity: number;
-  unitCost: number; // Cost from the invoice
-}
-
-export enum PaymentMethod {
-  PIX = 'Pix',
-  CASH = 'Dinheiro',
-  DEBIT_CARD = 'Cartão de Débito',
-  CREDIT_CARD = 'Cartão de Crédito', // Legacy/Generic
-  CREDIT_CARD_SIGHT = 'Crédito à Vista',
-  CREDIT_CARD_INSTALLMENT = 'Crédito Parcelado',
-  BANK_TRANSFER = 'Transferência Bancária',
-  BANK_SLIP = 'Boleto Bancário',
+  cashBalance: number;
+  totalInflows: number;
+  totalOutflows: number;
 }
 
 export enum Bank {
@@ -326,84 +442,4 @@ export enum Bank {
   INTER = 'Inter',
   CAIXA = 'Caixa',
   OTHER = 'Outros',
-}
-
-export interface Installment {
-  installmentNumber: number;
-  amount: number;
-  dueDate: Date;
-}
-
-export type PaymentDetails =
-  | { method: PaymentMethod.CASH; paymentDate: Date }
-  | {
-      method:
-        | PaymentMethod.PIX
-        | PaymentMethod.CREDIT_CARD
-        | PaymentMethod.CREDIT_CARD_SIGHT
-        | PaymentMethod.CREDIT_CARD_INSTALLMENT
-        | PaymentMethod.BANK_TRANSFER
-        | PaymentMethod.DEBIT_CARD;
-      bank: Bank;
-      paymentDate: Date;
-    }
-  | {
-      method: PaymentMethod.BANK_SLIP;
-      bank: Bank;
-      installments: Installment[];
-    };
-
-export interface SupplierInfo {
-  name: string;
-  cnpjCpf: string;
-  contactPerson: string;
-  phone: string;
-}
-
-export interface PurchaseOrder {
-  id: string;
-  items: PurchaseItem[];
-  freightCost: number;
-  otherCost: number;
-  totalCost: number;
-  paymentDetails: PaymentDetails;
-  createdAt: Date;
-  supplierInfo: SupplierInfo;
-  reference: string;
-}
-
-export interface Supplier {
-  id: string; // ObjectId
-  cnpjCpf: string; // Document is now a separate field
-  name: string;
-  contactPerson?: string;
-  phone: string;
-}
-
-// --- NEW FINANCIAL TYPES ---
-
-export interface ReceivingRule {
-  id?: string;
-  type: 'Pix' | 'Debit' | 'Credit';
-  installmentsMin: number;
-  installmentsMax: number;
-  taxRate: number; // %
-  daysToReceive: number;
-}
-
-export interface PaymentMethodConfig {
-  id?: string;
-  name: string; // "Pix Inter"
-  type: 'Pix' | 'Debit' | 'Boleto' | 'Credit';
-  closingDay?: number; // Only for Credit
-  dueDay?: number; // Only for Credit
-}
-
-export interface FinancialAccount {
-  id: string;
-  bankName: string;
-  balance: number;
-  receivingRules: ReceivingRule[];
-  paymentMethods: PaymentMethodConfig[];
-  isDefault?: boolean;
 }
