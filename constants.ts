@@ -1,4 +1,3 @@
-
 import { UserRole } from './types';
 
 export const navItems = [
@@ -21,10 +20,10 @@ export const navItems = [
     roles: [UserRole.OWNER, UserRole.MANAGER],
   },
   {
-    label: 'Financeiro',
-    path: 'finance',
-    icon: 'finance',
-    roles: [UserRole.OWNER],
+    label: 'E-commerce',
+    path: 'ecommerce',
+    icon: 'ecommerce', // Will need a new icon handler in Sidebar
+    roles: [UserRole.OWNER, UserRole.MANAGER],
   },
   {
     label: 'Caixa',
