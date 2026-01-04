@@ -1,13 +1,13 @@
-const isProd = (import.meta as any).env.PROD;
+const isProd = window.location.hostname === 'smart-store.fluxoclean.com.br';
 
 export const API_BASE_URL = isProd
-  ? 'https://api-smart-store.onrender.com/api'
-  : 'http://localhost:4001/api';
+  ? 'https://api-smart-store.fluxoclean.com.br/api'
+  : 'https://api-smart-store.local.fluxoclean.com.br/api';
 
 export const SAAS_LOGIN_URL = isProd
   ? 'https://fluxoclean.com.br/login'
-  : 'http://localhost:3000/login';
+  : 'https://app.local.fluxoclean.com.br/login';
 
 export const SAAS_API_URL = isProd
-  ? 'https://api-fluxoclean.onrender.com/api'
-  : 'http://localhost:4000/api';
+  ? 'https://api.fluxoclean.com.br/api'
+  : 'https://api.local.fluxoclean.com.br/api';
