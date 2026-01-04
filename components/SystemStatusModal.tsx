@@ -488,20 +488,19 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
     const isSingleTenant = statusData.plan === 'single_tenant';
     const trialDaysRemaining = Math.max(0, Math.ceil((new Date(statusData.trialEndsAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)));
     const today = new Date();
-    // const billingDay = statusData.monthlyPaymentDay || 5; 
     const lastPaid = statusData.lastPaymentDate ? new Date(statusData.lastPaymentDate) : null;
     const paidThisMonth = lastPaid && lastPaid.getMonth() === today.getMonth() && lastPaid.getFullYear() === today.getFullYear();
     const subEndsAt = statusData.subscriptionEndsAt ? new Date(statusData.subscriptionEndsAt) : null;
     const isCoverageActive = (subEndsAt && subEndsAt > today) || paidThisMonth;
-    // const isLate = !isCoverageActive && today.getDate() > billingDay;
-
     // Simplified checks for UI rendering logic
     const isLate = !isCoverageActive && (statusData.status === 'expired' || statusData.status === 'blocked');
 
     const isSecondExtensionAllowed = statusData.extensionCount === 1 && trialDaysRemaining <= 5;
     const isExtensionAllowed = statusData.extensionCount === 0 || isSecondExtensionAllowed;
 
-    const mapsRequest = statusData.requests.find(r => r.type === 'google_maps' && (r.status === 'completed' || r.status === 'approved'));
+    const mapsApproved = statusData.requests.find(r => r.type === 'google_maps' && r.status === 'approved');
+    const mapsCompleted = statusData.requests.find(r => r.type === 'google_maps' && r.status === 'completed') || googleStatus === 'verified';
+    
     const ecommerceRequest = statusData.requests.find(r => r.type === 'ecommerce' && (r.status === 'completed' || r.status === 'approved'));
 
     return (
@@ -564,19 +563,36 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
 
                     {!isFirstRun && !isDismissed && (
                         <>
-                             {/* GOOGLE MAPS CARD */}
-                             {mapsRequest ? (
+                             {/* GOOGLE MAPS CARD - UPDATED LOGIC */}
+                             {mapsCompleted ? (
                                 <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-4 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20`}>
                                     <div>
                                         <h4 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                                            <span>📍</span> Google Maps Ativo
+                                            <span>📍</span> Presença no Google Confirmada
                                         </h4>
                                         <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                            Sua loja está visível no Google.
+                                            Sua empresa está visivel no google.
+                                        </p>
+                                    </div>
+                                    <button 
+                                        onClick={() => { if(storeGoals?.googleBusiness?.mapsUri) window.open(storeGoals.googleBusiness.mapsUri, '_blank'); }} 
+                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm"
+                                    >
+                                        Ver Perfil
+                                    </button>
+                                </div>
+                             ) : mapsApproved ? (
+                                <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-4 bg-blue-50 border-blue-200 dark:bg-blue-900/20`}>
+                                    <div>
+                                        <h4 className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2">
+                                            <span>⏳</span> Presença no Google em andamento...
+                                        </h4>
+                                        <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
+                                            Estamos realizando o cadastramento da sua empresa no Google. Você será avisado. Aguarde.
                                         </p>
                                     </div>
                                 </div>
-                             ) : googleStatus === 'unverified' || googleStatus === 'not_found' ? (
+                             ) : (googleStatus === 'unverified' || googleStatus === 'not_found') ? (
                                 <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-xl border border-yellow-200 dark:border-yellow-700 flex flex-col sm:flex-row justify-between items-center gap-4">
                                     <div>
                                         <h4 className="font-bold text-yellow-800 dark:text-yellow-300 flex items-center gap-2">
@@ -589,7 +605,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                              ) : null}
 
                              {/* ECOMMERCE CARD */}
-                             {(googleStatus === 'verified' || mapsRequest?.status === 'completed') && (
+                             {(googleStatus === 'verified' || mapsCompleted) && (
                                 ecommerceRequest ? (
                                     <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-4 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20`}>
                                         <div>
