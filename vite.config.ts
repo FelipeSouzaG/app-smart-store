@@ -8,11 +8,11 @@ export default defineConfig({
     host: '0.0.0.0', // Mantido para acessibilidade
     port: 3002,
     strictPort: true,
-    // --- CORREÇÃO AQUI ---
+    // Permite que o Túnel acesse o dev server
     allowedHosts: [
       'smart-store.local.fluxoclean.com.br',
+      'smart-store.fluxoclean.com.br',
       'host.docker.internal',
     ],
-    // ---------------------
   },
 });
