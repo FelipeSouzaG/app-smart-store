@@ -9,10 +9,11 @@ import SystemStatusModal from './SystemStatusModal';
 import { AuthContext } from '../contexts/AuthContext';
 
 // Dynamic Success Modal
-const PaymentSuccessModal: React.FC<{ type: string; onClose: () => void }> = ({ type, onClose }) => {
+const PaymentSuccessModal: React.FC<{ type: string; onClose: () => void; tenantName?: string }> = ({ type, onClose, tenantName }) => {
     let title = "Pagamento Confirmado!";
     let message = "Sua solicitação foi processada com sucesso.";
     let buttonText = "Entendido";
+    let onButtonClick = onClose;
     let icon = (
         <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -33,6 +34,17 @@ const PaymentSuccessModal: React.FC<{ type: string; onClose: () => void }> = ({ 
                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
             </svg>
         );
+        // Custom Action for Ecommerce
+        onButtonClick = () => {
+            if (tenantName) {
+                const isLocal = window.location.hostname.includes('local') || window.location.hostname.includes('localhost');
+                const url = isLocal 
+                    ? `https://${tenantName}-smart-commerce.local.fluxoclean.com.br`
+                    : `https://${tenantName}.fluxoclean.com.br`;
+                window.open(url, '_blank');
+            }
+            onClose();
+        };
     } else if (type.startsWith('UPG') || type.startsWith('MIGRATE')) {
         title = "Pagamento Recebido!";
         message = "Obrigado! Iniciamos o processo de provisionamento do seu servidor exclusivo. Você pode continuar usando o sistema aqui normalmente enquanto preparamos tudo.";
@@ -57,7 +69,7 @@ const PaymentSuccessModal: React.FC<{ type: string; onClose: () => void }> = ({ 
                     {message}
                 </p>
                 <button 
-                    onClick={onClose}
+                    onClick={onButtonClick}
                     className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg transition-transform hover:scale-105"
                 >
                     {buttonText}
@@ -476,7 +488,7 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ticketSales, produc
         <div className="space-y-6">
             {isGoalsModalOpen && <GoalsModal currentGoals={goals} onSave={onSaveGoals} onClose={() => setIsGoalsModalOpen(false)}/>}
             {isStatusModalOpen && <SystemStatusModal onClose={() => setIsStatusModalOpen(false)} />}
-            {paymentSuccessType && <PaymentSuccessModal type={paymentSuccessType} onClose={handleSuccessClose} />}
+            {paymentSuccessType && <PaymentSuccessModal type={paymentSuccessType} onClose={handleSuccessClose} tenantName={goals.tenantName || goals.companyInfo.name} />}
             
             {isVerifyingPayment && (
                 <div className="fixed top-0 left-0 w-full h-1 bg-gray-200 z-100">
