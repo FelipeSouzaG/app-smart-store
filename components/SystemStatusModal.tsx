@@ -438,6 +438,18 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
         }
     };
 
+    const handleOpenStore = () => {
+        const tenantName = storeGoals?.tenantName || storeGoals?.companyInfo.name;
+        if (tenantName) {
+            const isLocal = window.location.hostname.includes('local') || window.location.hostname.includes('localhost');
+            const url = isLocal 
+                ? `https://${tenantName}-smart-commerce.local.fluxoclean.com.br`
+                : `https://${tenantName}.fluxoclean.com.br`;
+            window.open(url, '_blank');
+        }
+    };
+
+
     // --- RENDER ---
 
     if (isLoading) return <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-130 text-white">Carregando...</div>;
@@ -616,6 +628,12 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                                                 Sua loja está online.
                                             </p>
                                         </div>
+                                        <button 
+                                            onClick={handleOpenStore}
+                                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm"
+                                        >
+                                            Acessar Loja
+                                        </button>
                                     </div>
                                 ) : (
                                     <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-200 dark:border-indigo-700 flex flex-col sm:flex-row justify-between items-center gap-4">
