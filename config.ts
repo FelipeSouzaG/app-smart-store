@@ -1,4 +1,8 @@
-const isProd = window.location.hostname === 'smart-store.fluxoclean.com.br';
+
+const hostname = window.location.hostname;
+
+const isProd = hostname === 'smart-store.fluxoclean.com.br' || 
+               hostname.endsWith('.pages.dev');
 
 export const API_BASE_URL = isProd
   ? 'https://api-smart-store.fluxoclean.com.br/api'
@@ -11,3 +15,4 @@ export const SAAS_LOGIN_URL = isProd
 export const SAAS_API_URL = isProd
   ? 'https://api.fluxoclean.com.br/api'
   : 'https://api.local.fluxoclean.com.br/api';
+
