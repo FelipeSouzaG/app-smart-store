@@ -191,6 +191,9 @@ const Layout: React.FC = () => {
         financialSettings: { useBank: false, useCredit: false, cardClosingDay: 1, cardDueDay: 10 },
         googleBusiness: { status: 'unverified', hasExternalEcommerce: false }
     });
+    
+    // New State for Policy Enforcement Flow
+    const [showEcommercePolicies, setShowEcommercePolicies] = useState(false);
 
     // Broadcast State
     const [broadcasts, setBroadcasts] = useState<any[]>([]);
@@ -227,6 +230,7 @@ const Layout: React.FC = () => {
     const [billingStatusData, setBillingStatusData] = useState<any>(null);
     const [immediatePaymentRequest, setImmediatePaymentRequest] = useState<any>(null); 
     const [immediatePublicKey, setImmediatePublicKey] = useState<string>(''); 
+    const [paymentSuccessType, setPaymentSuccessType] = useState<string | null>(null);
 
     const cleanUrlHost = (url: string) => {
         return url.replace(/^(?:https?:\/\/)?(?:www\.)?/i, "").split('/')[0].split(':')[0].toLowerCase();
@@ -289,7 +293,13 @@ const Layout: React.FC = () => {
 
                 const urlParams = new URLSearchParams(window.location.search);
                 const paymentStatus = urlParams.get('status') || urlParams.get('collection_status');
-                const isPaymentReturn = paymentStatus === 'approved';
+                const paymentRef = urlParams.get('ref') || urlParams.get('external_reference');
+                const isPaymentReturn = paymentStatus === 'approved' && paymentRef;
+
+                if (isPaymentReturn && !paymentSuccessType) {
+                    // Start Payment Verification in Effect below
+                    setPaymentSuccessType(paymentRef);
+                }
 
                 const billingResponse = await fetch(`${SAAS_API_URL}/subscription/status`, {
                     headers: { 'Authorization': `Bearer ${token}` }
@@ -471,6 +481,55 @@ const Layout: React.FC = () => {
         bootstrapSystem();
     }, [token, user, fetchData, apiCall]);
 
+    // Payment Verification Hook Logic
+    const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+
+    useEffect(() => {
+        let isCancelled = false;
+        
+        const checkPaymentReturn = async () => {
+            if (!token || !paymentSuccessType) return; 
+
+            setIsVerifyingPayment(true);
+            try {
+                // Verify payment status with API
+                const data = await apiCall(`subscription/check-payment/${paymentSuccessType}`, 'POST');
+                
+                if (data && data.status === 'approved' && !isCancelled) {
+                    // Update URL to remove query params
+                    window.history.replaceState({}, document.title, window.location.pathname);
+                    
+                    // Logic to handle specific flows
+                    if (paymentSuccessType.startsWith('ECOM')) {
+                        // Force update local settings to reflect new e-commerce status
+                        await apiCall('settings', 'GET').then(settings => {
+                           if (settings) setGoals(prev => ({ ...prev, ...settings }));
+                        });
+                        
+                        // Switch tab and show policies immediately
+                        setActivePage('ecommerce');
+                        setShowEcommercePolicies(true); // New state to trigger modal
+                        setPaymentSuccessType(null); // Clear success type to close standard modal if any
+                    } else {
+                        // For other types, let the standard modal handle or just refresh
+                        // (Standard success modal is handled inside Dashboard usually, but we are lifting state)
+                        // If it's standard, we can reload or show notification
+                         setNotification({ isOpen: true, type: 'success', message: 'Pagamento confirmado com sucesso!' });
+                         setPaymentSuccessType(null);
+                    }
+                }
+            } catch (error) {
+                console.error("Error verifying payment:", error);
+            } finally {
+                if (!isCancelled) setIsVerifyingPayment(false);
+            }
+        };
+
+        checkPaymentReturn();
+        return () => { isCancelled = true; };
+    }, [token, apiCall, paymentSuccessType]);
+
+
     // --- EVENT HANDLERS ---
 
     const handleCloseStatusModal = () => {
@@ -500,6 +559,16 @@ const Layout: React.FC = () => {
         if (newGoals.isSetupComplete && !checkCriticalDataMissing(newGoals) && isContractAccepted) {
             setShowSetupWizard(false);
         }
+    };
+    
+    // Callback after saving policies
+    const handlePoliciesSaved = async () => {
+        try {
+            // Re-fetch settings to update local state and hide modal
+            const settings = await apiCall('settings', 'GET');
+            if (settings) setGoals(prev => ({ ...prev, ...settings }));
+            setShowEcommercePolicies(false);
+        } catch(e) { }
     };
 
     const handleGrowthAction = () => {
@@ -660,11 +729,27 @@ const Layout: React.FC = () => {
 
     // --- RENDER CONTENT SWITCHER ---
     const renderContent = () => {
+        // If Ecommerce Policies need to be shown (activated via payment flow), intercept render
+        if (showEcommercePolicies && activePage === 'ecommerce') {
+            return (
+                <div className="relative">
+                    <EcommerceOrders goals={goals} onOrderUpdate={refreshEcommerceData} products={products} />
+                     {/* The modal is handled inside EcommerceOrders via internal state usually, 
+                         but here we are forcing it via layout prop passing or directly rendering the Modal 
+                         component on top if desired. 
+                         Actually, EcommerceOrders already has the policy modal logic inside it triggered by `goals` state.
+                         We updated `goals` in the payment return logic, so `EcommerceOrders` should 
+                         detect `ecommercePolicies.configured === false` and show it automatically.
+                     */}
+                </div>
+            );
+        }
+
         switch (activePage) {
             case 'dashboard': return <Dashboard transactions={transactions} ticketSales={ticketSales} products={products} goals={goals} onSaveGoals={handleSaveGoals} />;
             case 'sales': return <Sales products={products} onAddSale={handleAddSale} goals={goals} />;
             case 'sales-history': return <SalesHistory sales={ticketSales} goals={goals} />;
-            case 'ecommerce': return <EcommerceOrders goals={goals} onOrderUpdate={refreshEcommerceData} />;
+            case 'ecommerce': return <EcommerceOrders goals={goals} onOrderUpdate={refreshEcommerceData} products={products} />;
             case 'cash': return <Cash transactions={transactions} creditTransactions={creditTransactions} accounts={accounts} updateTransactionStatus={updateTransactionStatus} updateTransaction={updateTransaction} onSaveAccount={async () => {}} onDeleteAccount={async () => {}} onRefreshData={refreshFinancialData} />;
             case 'purchases': return <Purchases products={products} purchaseOrders={purchaseOrders} onAddPurchase={handleAddPurchase} onUpdatePurchase={updatePurchaseOrder} onDeletePurchase={deletePurchaseOrder} goals={goals} />;
             case 'costs': return <Costs transactions={transactions} addTransaction={addTransaction} updateTransaction={updateTransaction} deleteTransaction={deleteTransaction} />;
@@ -829,6 +914,15 @@ const Layout: React.FC = () => {
 
             {showSetupWizard && !showWelcomeModal && !isSystemBlocked && !isFirstRunST && (
                 <GoalsModal currentGoals={goals} onSave={handleSaveGoals} onClose={() => {}} forceSetup={true} />
+            )}
+            
+            {/* Loading Overlay for Payment Verification */}
+            {isVerifyingPayment && (
+                 <div className="fixed inset-0 z-200 bg-black/80 flex flex-col items-center justify-center text-white backdrop-blur-sm">
+                    <div className="animate-spin rounded-full h-16 w-16 border-4 border-t-transparent border-white mb-4"></div>
+                    <p className="font-bold text-lg">Confirmando Pagamento...</p>
+                    <p className="text-sm opacity-70">Por favor, aguarde.</p>
+                </div>
             )}
 
             {/* Mobile Header */}
