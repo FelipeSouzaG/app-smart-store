@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useContext } from 'react';
-import { EcommerceOrder, KpiGoals, TicketSale } from '../types';
+import { EcommerceOrder, KpiGoals, TicketSale, Product } from '../types';
 import { AuthContext } from '../contexts/AuthContext';
 import { API_BASE_URL } from '../config'; 
 import { formatCurrencyNumber, formatPhone, formatMoney } from '../validation';
@@ -66,6 +66,7 @@ const ReceiptModal: React.FC<{ imageData: string; fileName: string; onClose: () 
 
 interface Props {
     goals: KpiGoals;
+    products: Product[];
     onOrderUpdate: () => void;
 }
 
@@ -74,26 +75,56 @@ interface Props {
 const OrderDetailsModal: React.FC<{ 
     order: EcommerceOrder; 
     onClose: () => void;
-    onUpdateStatus: (id: string, status: string, shippingInfo?: any) => Promise<void>;
+    onUpdateStatus: (id: string, status: string, shippingInfo?: any, items?: any[]) => Promise<void>;
     onUpdateShipping: (id: string, shippingInfo: any) => void;
     onGenerateReceipt: (order: EcommerceOrder) => void;
     goals: KpiGoals;
-}> = ({ order, onClose, onUpdateStatus, onUpdateShipping, onGenerateReceipt, goals }) => {
+    products: Product[];
+}> = ({ order, onClose, onUpdateStatus, onUpdateShipping, onGenerateReceipt, goals, products }) => {
     const [shippingMethod, setShippingMethod] = useState(order.shippingInfo?.method || '');
     const [trackingCode, setTrackingCode] = useState(order.shippingInfo?.trackingCode || '');
     const [shippingCost, setShippingCost] = useState(formatMoney(order.shippingInfo?.cost?.toString() || '0'));
     const [isEditingShipping, setIsEditingShipping] = useState(false);
     
+    // Identifier State
+    const [itemIdentifiers, setItemIdentifiers] = useState<{ [key: string]: string }>({});
+    const [requiredIdentifiers, setRequiredIdentifiers] = useState<string[]>([]);
+    
     const [confirmAction, setConfirmAction] = useState<{message: React.ReactNode, action: () => void} | null>(null);
     const [notification, setNotification] = useState<{isOpen: boolean; type: 'success' | 'error'; message: string}>({ isOpen: false, type: 'error', message: '' });
-    const [errorMessage, setErrorMessage] = useState(''); // To show backend errors inline
+    const [errorMessage, setErrorMessage] = useState(''); 
 
     const parseMoney = (val: string) => parseFloat(val.replace('R$ ', '').replace(/\./g, '').replace(',', '.')) || 0;
+
+    // Initialize Identifiers
+    useEffect(() => {
+        const required: string[] = [];
+        const initialIds: { [key: string]: string } = {};
+
+        order.items.forEach(item => {
+            const product = products.find(p => p.id === item.productId);
+            if (product && product.requiresUniqueIdentifier) {
+                required.push(item.productId);
+                if (item.uniqueIdentifier) initialIds[item.productId] = item.uniqueIdentifier;
+            }
+        });
+        
+        setRequiredIdentifiers(required);
+        // Only set initial IDs if not already set (preserve user input)
+        setItemIdentifiers(prev => ({...initialIds, ...prev}));
+    }, [order, products]);
 
     const handleSend = () => {
         if (!shippingMethod) { 
             setNotification({ isOpen: true, type: 'error', message: "Informe o método de envio." });
             return; 
+        }
+
+        // Validate Identifiers
+        const missingIds = requiredIdentifiers.filter(id => !itemIdentifiers[id] || itemIdentifiers[id].trim() === '');
+        if (missingIds.length > 0) {
+            setNotification({ isOpen: true, type: 'error', message: "Preencha os identificadores únicos (Serial/IMEI) obrigatórios." });
+            return;
         }
         
         const payload = {
@@ -103,6 +134,12 @@ const OrderDetailsModal: React.FC<{
         };
         
         if (order.status === 'PENDING') {
+            // Prepare updated items list with identifiers
+            const updatedItems = order.items.map(item => ({
+                ...item,
+                uniqueIdentifier: itemIdentifiers[item.productId] || item.uniqueIdentifier
+            }));
+
             setConfirmAction({
                 message: (
                     <div>
@@ -113,7 +150,7 @@ const OrderDetailsModal: React.FC<{
                 ),
                 action: async () => {
                     try {
-                        await onUpdateStatus(order.id, 'SENT', payload);
+                        await onUpdateStatus(order.id, 'SENT', payload, updatedItems);
                         setErrorMessage('');
                     } catch (e: any) {
                         setErrorMessage(e.message || "Erro ao atualizar status");
@@ -225,12 +262,37 @@ const OrderDetailsModal: React.FC<{
                     <div>
                         <h4 className="font-bold text-gray-700 dark:text-gray-300 mb-2">Itens</h4>
                         <div className="border rounded-lg overflow-hidden dark:border-gray-600">
-                            {order.items.map((item, idx) => (
-                                <div key={idx} className="flex justify-between p-3 border-b last:border-0 dark:border-gray-600 bg-white dark:bg-gray-800">
-                                    <span className="text-sm dark:text-gray-200">{item.quantity}x {item.productName}</span>
-                                    <span className="text-sm font-bold dark:text-white">R$ {formatCurrencyNumber(item.unitPrice * item.quantity)}</span>
+                            {order.items.map((item, idx) => {
+                                const needsId = requiredIdentifiers.includes(item.productId);
+                                const isPending = order.status === 'PENDING';
+                                
+                                return (
+                                <div key={idx} className="p-3 border-b last:border-0 dark:border-gray-600 bg-white dark:bg-gray-800">
+                                    <div className="flex justify-between mb-1">
+                                        <span className="text-sm dark:text-gray-200">{item.quantity}x {item.productName}</span>
+                                        <span className="text-sm font-bold dark:text-white">R$ {formatCurrencyNumber(item.unitPrice * item.quantity)}</span>
+                                    </div>
+                                    
+                                    {/* ID Input for tracked items */}
+                                    {needsId && (
+                                        <div className="mt-2">
+                                            {isPending ? (
+                                                <input 
+                                                    type="text" 
+                                                    placeholder="Insira Serial/IMEI único" 
+                                                    className="w-full text-xs p-1.5 border border-orange-300 rounded bg-orange-50 focus:ring-1 focus:ring-orange-500 outline-none dark:bg-gray-700 dark:border-gray-500 dark:text-white"
+                                                    value={itemIdentifiers[item.productId] || ''}
+                                                    onChange={e => setItemIdentifiers(prev => ({...prev, [item.productId]: e.target.value}))}
+                                                />
+                                            ) : (
+                                                <p className="text-xs font-mono text-gray-500 bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded inline-block">
+                                                    ID: {item.uniqueIdentifier || 'N/A'}
+                                                </p>
+                                            )}
+                                        </div>
+                                    )}
                                 </div>
-                            ))}
+                            )})}
                             <div className="p-3 bg-gray-100 dark:bg-gray-700 flex justify-between items-center">
                                 <span className="font-bold dark:text-white">Total</span>
                                 <span className="font-bold text-lg text-indigo-600 dark:text-indigo-400">R$ {formatCurrencyNumber(order.total)}</span>
@@ -310,7 +372,7 @@ const OrderDetailsModal: React.FC<{
 
 // --- MAIN COMPONENT ---
 
-const EcommerceOrders: React.FC<Props> = ({ goals, onOrderUpdate }) => {
+const EcommerceOrders: React.FC<Props> = ({ goals, products, onOrderUpdate }) => {
     const { apiCall, token } = useContext(AuthContext); // token needed for raw fetch
     const [orders, setOrders] = useState<EcommerceOrder[]>([]);
     const [selectedOrder, setSelectedOrder] = useState<EcommerceOrder | null>(null);
@@ -343,7 +405,7 @@ const EcommerceOrders: React.FC<Props> = ({ goals, onOrderUpdate }) => {
     }, []);
 
     // FIX: Using direct fetch to capture specific backend error message
-    const handleUpdateStatus = async (id: string, status: string, shippingInfo?: any) => {
+    const handleUpdateStatus = async (id: string, status: string, shippingInfo?: any, items?: any[]) => {
         try {
             const response = await fetch(`${API_BASE_URL}/ecommerce-orders/${id}/status`, {
                 method: 'PUT',
@@ -351,7 +413,7 @@ const EcommerceOrders: React.FC<Props> = ({ goals, onOrderUpdate }) => {
                     'Content-Type': 'application/json',
                     'Authorization': `Bearer ${token}`
                 },
-                body: JSON.stringify({ status, shippingInfo })
+                body: JSON.stringify({ status, shippingInfo, items }) // Inclui itens atualizados (IDs)
             });
 
             const data = await response.json();
@@ -395,6 +457,7 @@ const EcommerceOrders: React.FC<Props> = ({ goals, onOrderUpdate }) => {
         if (onOrderUpdate) onOrderUpdate();
     };
 
+    // ... (generateReceipt - same as original)
     const generateReceipt = async (order: EcommerceOrder) => {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
@@ -493,6 +556,7 @@ const EcommerceOrders: React.FC<Props> = ({ goals, onOrderUpdate }) => {
         setReceiptImage({ data: canvas.toDataURL('image/png'), name: `${order.id}.png` });
     };
 
+
     const getStatusBadge = (status: string) => {
         switch(status) {
             case 'PENDING': return <span className="px-2 py-1 bg-yellow-100 text-yellow-800 rounded-full text-xs font-bold">Pendente</span>;
@@ -547,6 +611,7 @@ const EcommerceOrders: React.FC<Props> = ({ goals, onOrderUpdate }) => {
                     onUpdateShipping={handleUpdateShipping}
                     onGenerateReceipt={generateReceipt}
                     goals={goals}
+                    products={products} // Pass Products
                 />
             )}
 
