@@ -1,3 +1,4 @@
+
 export interface User {
   id: string;
   name: string;
@@ -265,6 +266,7 @@ export interface EcommerceOrder {
     unitPrice: number;
     image?: string;
     type: 'product' | 'service';
+    uniqueIdentifier?: string;
   }[];
   total: number;
   status: 'PENDING' | 'SENT' | 'DELIVERED' | 'CANCELLED';
