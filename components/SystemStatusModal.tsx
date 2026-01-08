@@ -515,6 +515,10 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
     
     const ecommerceRequest = statusData.requests.find(r => r.type === 'ecommerce' && (r.status === 'completed' || r.status === 'approved'));
 
+    // --- CORREÇÃO DE PROVISIONAMENTO: Detecta se há um upgrade 'approved' mas não 'completed' ---
+    const activeUpgrade = statusData.requests.find(r => r.type === 'upgrade' && r.status === 'approved');
+    const isProvisioning = !!activeUpgrade;
+
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-120 p-4">
             <NotificationModal isOpen={notification.isOpen} type={notification.type} message={notification.message} onClose={() => setNotification({ ...notification, isOpen: false })} />
@@ -573,9 +577,27 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                         </div>
                     )}
 
+                    {/* CORREÇÃO: Bloqueia cards normais se estiver provisionando */}
                     {!isFirstRun && !isDismissed && (
                         <>
-                             {/* GOOGLE MAPS CARD - UPDATED LOGIC */}
+                        {isProvisioning ? (
+                             <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm border-2 border-yellow-400 text-center animate-fade-in">
+                                <div className="mx-auto w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
+                                    <svg className="h-8 w-8 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Preparando seu Ambiente</h3>
+                                <p className="text-gray-500 mb-6 text-sm">
+                                    O pagamento foi confirmado e nosso servidor está configurando sua instância dedicada.
+                                    <br/>
+                                    <strong>Você será notificado aqui</strong> assim que a migração estiver pronta.
+                                </p>
+                                <div className="inline-block bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold animate-pulse">
+                                    Status: Provisionamento em andamento...
+                                </div>
+                             </div>
+                        ) : (
+                            <>
+                             {/* GOOGLE MAPS CARD */}
                              {mapsCompleted ? (
                                 <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-4 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20`}>
                                     <div>
@@ -645,77 +667,77 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                                     </div>
                                 )
                              )}
-                        </>
-                    )}
 
-                    {/* Single Tenant / Mensalidade Cards */}
-                    {!isFirstRun && (
-                        isSingleTenant ? (
-                             <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4">
-                                <div>
-                                    <h3 className="font-bold text-lg text-gray-900 dark:text-white">Mensalidade Exclusive</h3>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400">Próximo Vencimento: Dia {statusData.monthlyPaymentDay}</p>
-                                </div>
-                                {isCoverageActive ? (
-                                    <span className="px-6 py-3 bg-green-100 text-green-700 font-bold rounded-xl border border-green-200 flex items-center gap-2">
-                                        ✓ Plano Ativo
-                                    </span>
-                                ) : (
-                                    <button onClick={() => handleRequest('monthly')} className={`px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-transform hover:scale-105 ${isLate ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
-                                        {isLate ? 'Pagar Agora (Atrasado)' : 'Pagar Mensalidade'}
-                                    </button>
-                                )}
-                            </div>
-                        ) : (
-                            // Trial Options
-                            <div className="grid grid-cols-1 gap-4">
-                                <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-300 transition-colors shadow-sm">
-                                    <div className="flex justify-between items-start mb-2">
-                                        <h4 className="font-bold text-indigo-900 dark:text-white">Manutenção do Trial</h4>
-                                        <span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded-full font-bold">{2 - statusData.extensionCount} restantes</span>
+                            {/* Single Tenant / Mensalidade Cards */}
+                            {isSingleTenant ? (
+                                 <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                    <div>
+                                        <h3 className="font-bold text-lg text-gray-900 dark:text-white">Mensalidade Exclusive</h3>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400">Próximo Vencimento: Dia {statusData.monthlyPaymentDay}</p>
                                     </div>
-                                    <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                                        {statusData.extensionCount === 1 
-                                            ? "Segunda extensão disponível apenas nos últimos 5 dias." 
-                                            : "Precisa de mais tempo? Adicione 30 dias por R$ 97,00."}
-                                    </p>
-                                    
-                                    {isExtensionAllowed && statusData.extensionCount < 2 ? (
-                                        <button 
-                                            onClick={() => handleRequest('extension')} 
-                                            className="w-full py-2 border-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
-                                        >
-                                            Solicitar Extensão
-                                        </button>
+                                    {isCoverageActive ? (
+                                        <span className="px-6 py-3 bg-green-100 text-green-700 font-bold rounded-xl border border-green-200 flex items-center gap-2">
+                                            ✓ Plano Ativo
+                                        </span>
                                     ) : (
-                                        <button 
-                                            onClick={() => setNotification({ 
-                                                isOpen: true, 
-                                                type: 'info', 
-                                                message: statusData.extensionCount >= 2 
-                                                    ? 'Você já utilizou todas as extensões permitidas.' 
-                                                    : 'A segunda extensão só pode ser solicitada nos últimos 5 dias do período atual.' 
-                                            })}
-                                            className="w-full py-2 bg-gray-100 dark:bg-gray-700 text-gray-400 font-bold rounded-lg cursor-help border border-transparent"
-                                        >
-                                            {statusData.extensionCount >= 2 ? 'Limite Atingido' : 'Aguarde os 5 dias finais'}
+                                        <button onClick={() => handleRequest('monthly')} className={`px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-transform hover:scale-105 ${isLate ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                                            {isLate ? 'Pagar Agora (Atrasado)' : 'Pagar Mensalidade'}
                                         </button>
                                     )}
                                 </div>
+                            ) : (
+                                // Trial Options
+                                <div className="grid grid-cols-1 gap-4">
+                                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-300 transition-colors shadow-sm">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <h4 className="font-bold text-indigo-900 dark:text-white">Manutenção do Trial</h4>
+                                            <span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded-full font-bold">{2 - statusData.extensionCount} restantes</span>
+                                        </div>
+                                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                            {statusData.extensionCount === 1 
+                                                ? "Segunda extensão disponível apenas nos últimos 5 dias." 
+                                                : "Precisa de mais tempo? Adicione 30 dias por R$ 97,00."}
+                                        </p>
+                                        
+                                        {isExtensionAllowed && statusData.extensionCount < 2 ? (
+                                            <button 
+                                                onClick={() => handleRequest('extension')} 
+                                                className="w-full py-2 border-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                                            >
+                                                Solicitar Extensão
+                                            </button>
+                                        ) : (
+                                            <button 
+                                                onClick={() => setNotification({ 
+                                                    isOpen: true, 
+                                                    type: 'info', 
+                                                    message: statusData.extensionCount >= 2 
+                                                        ? 'Você já utilizou todas as extensões permitidas.' 
+                                                        : 'A segunda extensão só pode ser solicitada nos últimos 5 dias do período atual.' 
+                                                })}
+                                                className="w-full py-2 bg-gray-100 dark:bg-gray-700 text-gray-400 font-bold rounded-lg cursor-help border border-transparent"
+                                            >
+                                                {statusData.extensionCount >= 2 ? 'Limite Atingido' : 'Aguarde os 5 dias finais'}
+                                            </button>
+                                        )}
+                                    </div>
 
-                                <div className="bg-linear-to-br from-indigo-900 to-purple-800 p-5 rounded-xl text-white shadow-lg relative overflow-hidden">
-                                     <div className="absolute top-0 right-0 bg-indigo-500 text-white text-[10px] font-black px-3 py-1 rounded-bl-lg tracking-widest">EXCLUSIVE</div>
-                                    <h4 className="font-bold text-lg mb-1">Migrar para Exclusive</h4>
-                                    <p className="text-indigo-100 text-sm mb-4">Infraestrutura dedicada e banco de dados isolado.</p>
-                                    <button 
-                                        onClick={() => setShowSingleTenantDetail(true)}
-                                        className="w-full py-3 bg-white text-indigo-900 font-bold rounded-lg hover:bg-gray-100 shadow-md transition-colors"
-                                    >
-                                        Ver Planos e Migrar
-                                    </button>
+                                    <div className="bg-linear-to-br from-indigo-900 to-purple-800 p-5 rounded-xl text-white shadow-lg relative overflow-hidden">
+                                         <div className="absolute top-0 right-0 bg-indigo-500 text-white text-[10px] font-black px-3 py-1 rounded-bl-lg tracking-widest">EXCLUSIVE</div>
+                                        <h4 className="font-bold text-lg mb-1">Migrar para Exclusive</h4>
+                                        <p className="text-indigo-100 text-sm mb-4">Infraestrutura dedicada e banco de dados isolado.</p>
+                                        <button 
+                                            onClick={() => setShowSingleTenantDetail(true)}
+                                            className="w-full py-3 bg-white text-indigo-900 font-bold rounded-lg hover:bg-gray-100 shadow-md transition-colors"
+                                        >
+                                            Ver Planos e Migrar
+                                        </button>
+                                    </div>
                                 </div>
-                            </div>
-                        )
+                            )}
+                            </>
+                        )}
+                        </>
                     )}
 
                      {/* Histórico de Solicitações */}
