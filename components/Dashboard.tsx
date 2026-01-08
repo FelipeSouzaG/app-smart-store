@@ -8,77 +8,6 @@ import GoalsModal from './GoalsModal';
 import SystemStatusModal from './SystemStatusModal';
 import { AuthContext } from '../contexts/AuthContext';
 
-// Dynamic Success Modal
-const PaymentSuccessModal: React.FC<{ type: string; onClose: () => void; tenantName?: string }> = ({ type, onClose, tenantName }) => {
-    let title = "Pagamento Confirmado!";
-    let message = "Sua solicitação foi processada com sucesso.";
-    let buttonText = "Entendido";
-    let onButtonClick = onClose;
-    let icon = (
-        <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-        </svg>
-    );
-
-    // Customize based on reference prefix
-    if (type.startsWith('GMAPS')) {
-        title = "Pagamento Confirmado!";
-        message = "Recebemos sua solicitação de cadastro no Google para aumentar a visibilidade da sua loja, já estamos cuidando disso!";
-        buttonText = "Entendido";
-    } else if (type.startsWith('ECOM')) {
-        title = "Loja Virtual Ativada!";
-        message = "Sua degustação da Loja Online foi liberada com sucesso! O menu 'E-commerce' e 'Produtos' já foram atualizados com as novas funcionalidades.";
-        buttonText = "Acessar Loja Agora";
-        icon = (
-            <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
-            </svg>
-        );
-        // Custom Action for Ecommerce
-        onButtonClick = () => {
-            if (tenantName) {
-                const isLocal = window.location.hostname.includes('local') || window.location.hostname.includes('localhost');
-                const url = isLocal 
-                    ? `https://${tenantName}-smart-commerce.local.fluxoclean.com.br`
-                    : `https://${tenantName}.fluxoclean.com.br`;
-                window.open(url, '_blank');
-            }
-            onClose();
-        };
-    } else if (type.startsWith('UPG') || type.startsWith('MIGRATE')) {
-        title = "Pagamento Recebido!";
-        message = "Obrigado! Iniciamos o processo de provisionamento do seu servidor exclusivo. Você pode continuar usando o sistema aqui normalmente enquanto preparamos tudo.";
-        buttonText = "Continuar Usando";
-    } else if (type.startsWith('MTH')) {
-        title = "Mensalidade Confirmada";
-        message = "Obrigado! Seu acesso ao sistema foi renovado com sucesso.";
-        buttonText = "Voltar ao Dashboard";
-    } else if (type.startsWith('TRIAL')) {
-        title = "Degustação Renovada!";
-        message = "Seu período de testes foi estendido por mais 30 dias com sucesso.";
-    }
-
-    return (
-        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-200 p-4">
-            <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl flex flex-col items-center animate-fade-in max-w-sm text-center">
-                <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mb-4">
-                    {icon}
-                </div>
-                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{title}</h3>
-                <p className="text-gray-500 dark:text-gray-300 mb-6 text-sm leading-relaxed">
-                    {message}
-                </p>
-                <button 
-                    onClick={onButtonClick}
-                    className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg transition-transform hover:scale-105"
-                >
-                    {buttonText}
-                </button>
-            </div>
-        </div>
-    );
-};
-
 const KpiCard: React.FC<{ title: string; value: string; note?: string; colorClass?: string }> = ({ title, value, note, colorClass = "text-gray-900 dark:text-white" }) => (
     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg hover:shadow-2xl transition-shadow duration-300 flex flex-col justify-between">
          <div>
@@ -191,7 +120,7 @@ interface DashboardProps {
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ transactions, ticketSales, products, goals, onSaveGoals }) => {
-    const { token, apiCall, logout } = useContext(AuthContext); 
+    const { apiCall } = useContext(AuthContext); 
     const getCurrentCompetency = () => {
         const now = new Date();
         const year = now.getFullYear();
@@ -204,50 +133,6 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ticketSales, produc
     const [isStatusModalOpen, setIsStatusModalOpen] = useState(false);
     const [insights, setInsights] = useState<string>('');
     const [isLoadingInsights, setIsLoadingInsights] = useState(false);
-    const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
-    
-    // Payment Success State
-    const [paymentSuccessType, setPaymentSuccessType] = useState<string | null>(null);
-
-    // Lógica de Verificação de Pagamento (Retorno do Mercado Pago)
-    useEffect(() => {
-        let isCancelled = false;
-        
-        const checkPaymentReturn = async () => {
-            if (!token) return; // Aguarda o token estar disponível
-
-            const urlParams = new URLSearchParams(window.location.search);
-            const status = urlParams.get('status') || urlParams.get('collection_status');
-            const ref = urlParams.get('ref') || urlParams.get('external_reference');
-
-            // Só processa se houver aprovação e referência, e se ainda não foi processado
-            if (status === 'approved' && ref && !paymentSuccessType) {
-                console.log("🔄 Retorno de Pagamento detectado:", ref);
-                setIsVerifyingPayment(true);
-                
-                try {
-                    // FIX: Usar apiCall (proxy) em vez de fetch direto para evitar perda de cookie/sessão
-                    // O backend já faz a tratativa SSL se necessário
-                    const data = await apiCall(`subscription/check-payment/${ref}`, 'POST');
-                    
-                    if (data && data.status === 'approved' && !isCancelled) {
-                        setPaymentSuccessType(ref); 
-                        // Limpa a URL para evitar reprocessamento no reload
-                        window.history.replaceState({}, document.title, window.location.pathname);
-                    } else {
-                        console.warn("Pagamento ainda não confirmado na API ou erro de conexão.");
-                    }
-                } catch (error) {
-                    console.error("Erro na verificação do pagamento:", error);
-                } finally {
-                    if (!isCancelled) setIsVerifyingPayment(false);
-                }
-            }
-        };
-
-        checkPaymentReturn();
-        return () => { isCancelled = true; };
-    }, [token, apiCall, paymentSuccessType]); 
 
     const handleCompetencyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setCompetency(e.target.value);
@@ -255,11 +140,6 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ticketSales, produc
 
     const handleSystemStatus = () => {
         setIsStatusModalOpen(true);
-    };
-
-    const handleSuccessClose = () => {
-        setPaymentSuccessType(null);
-        window.location.reload(); 
     };
 
     const { kpis, top10SoldProducts, top10LowestTurnoverProducts, top5SalesPeaks } = useMemo(() => {
@@ -488,13 +368,6 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ticketSales, produc
         <div className="space-y-6">
             {isGoalsModalOpen && <GoalsModal currentGoals={goals} onSave={onSaveGoals} onClose={() => setIsGoalsModalOpen(false)}/>}
             {isStatusModalOpen && <SystemStatusModal onClose={() => setIsStatusModalOpen(false)} />}
-            {paymentSuccessType && <PaymentSuccessModal type={paymentSuccessType} onClose={handleSuccessClose} tenantName={goals.tenantName || goals.companyInfo.name} />}
-            
-            {isVerifyingPayment && (
-                <div className="fixed top-0 left-0 w-full h-1 bg-gray-200 z-100">
-                    <div className="h-full bg-green-500 animate-progressBar"></div>
-                </div>
-            )}
             
             <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
                  <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
