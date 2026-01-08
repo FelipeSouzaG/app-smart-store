@@ -397,10 +397,13 @@ const Layout: React.FC = () => {
                     const mapsRequest = requests.find((r: any) => r.type === 'google_maps');
                     const ecomRequest = requests.find((r: any) => r.type === 'ecommerce');
                     
+                    // CORREÇÃO: Verificar se já existe upgrade pago/andamento
+                    const hasActiveUpgrade = requests.some((r: any) => r.type === 'upgrade' && ['approved', 'waiting_switch', 'completed'].includes(r.status));
+
                     const isMapsPending = mapsRequest && (mapsRequest.status === 'pending' || mapsRequest.status === 'waiting_payment');
                     const isEcomPending = ecomRequest && (ecomRequest.status === 'pending' || ecomRequest.status === 'waiting_payment');
 
-                    if (!isDismissed && !sessionChecked && !isMapsPending && !isEcomPending) {
+                    if (!isDismissed && !sessionChecked && !isMapsPending && !isEcomPending && !hasActiveUpgrade) {
                         const isMapsCompleted = googleStatus === 'verified' || (mapsRequest && mapsRequest.status === 'completed' || mapsRequest?.status === 'approved');
                         const hasEcommerceService = requests.some((r: any) => r.type === 'ecommerce' && (r.status === 'completed' || r.status === 'approved'));
                         const hasExternalEcom = gBus.hasExternalEcommerce === true;
@@ -418,6 +421,7 @@ const Layout: React.FC = () => {
                             }
                         } else if (billingData.plan === 'trial' && isMapsCompleted && (hasEcommerceService || hasExternalEcom)) {
                             // Upsell to Single Tenant if Trial user has everything else
+                            // AND not already upgrading (Checked above)
                             determinedAction = 'growth';
                             growthVariant = 'single_tenant_offer';
                         }
@@ -606,7 +610,7 @@ const Layout: React.FC = () => {
                 setNotification({ isOpen: true, type: 'error', message: data.message || 'Erro.' });
             }
         } catch (e) { 
-            setNotification({ isOpen: true, type: 'error', message: 'Erro de conexão.' });
+            setNotification({ isOpen: true, type: 'error', message: 'Erro de conexão.' }); 
         }
     };
 
