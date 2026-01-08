@@ -33,6 +33,77 @@ import {
     CashTransaction, Service, Product, PurchaseOrder, ServiceOrder, TicketSale, User, Customer, Supplier, KpiGoals, TurnoverPeriod, FinancialAccount, TransactionStatus
 } from '../types';
 
+// PaymentSuccessModal (Moved from Dashboard.tsx)
+const PaymentSuccessModal: React.FC<{ type: string; onClose: () => void; tenantName?: string }> = ({ type, onClose, tenantName }) => {
+    let title = "Pagamento Confirmado!";
+    let message = "Sua solicitação foi processada com sucesso.";
+    let buttonText = "Entendido";
+    let onButtonClick = onClose;
+    let icon = (
+        <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+    );
+
+    // Customize based on reference prefix
+    if (type.startsWith('GMAPS')) {
+        title = "Pagamento Confirmado!";
+        message = "Recebemos sua solicitação de cadastro no Google para aumentar a visibilidade da sua loja, já estamos cuidando disso!";
+        buttonText = "Entendido";
+    } else if (type.startsWith('ECOM')) {
+        title = "Loja Virtual Ativada!";
+        message = "Sua degustação da Loja Online foi liberada com sucesso! O menu 'E-commerce' e 'Produtos' já foram atualizados com as novas funcionalidades.";
+        buttonText = "Acessar Loja Agora";
+        icon = (
+            <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+            </svg>
+        );
+        // Custom Action for Ecommerce
+        onButtonClick = () => {
+            if (tenantName) {
+                const isLocal = window.location.hostname.includes('local') || window.location.hostname.includes('localhost');
+                const url = isLocal 
+                    ? `https://${tenantName}-smart-commerce.local.fluxoclean.com.br`
+                    : `https://${tenantName}.fluxoclean.com.br`;
+                window.open(url, '_blank');
+            }
+            onClose();
+        };
+    } else if (type.startsWith('UPG') || type.startsWith('MIGRATE')) {
+        title = "Pagamento Recebido!";
+        message = "Obrigado! Iniciamos o processo de provisionamento do seu servidor exclusivo. Você pode continuar usando o sistema aqui normalmente enquanto preparamos tudo.";
+        buttonText = "Continuar Usando";
+    } else if (type.startsWith('MTH')) {
+        title = "Mensalidade Confirmada";
+        message = "Obrigado! Seu acesso ao sistema foi renovado com sucesso.";
+        buttonText = "Voltar ao Dashboard";
+    } else if (type.startsWith('TRIAL')) {
+        title = "Degustação Renovada!";
+        message = "Seu período de testes foi estendido por mais 30 dias com sucesso.";
+    }
+
+    return (
+        <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-200 p-4">
+            <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl flex flex-col items-center animate-fade-in max-w-sm text-center">
+                <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mb-4">
+                    {icon}
+                </div>
+                <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">{title}</h3>
+                <p className="text-gray-500 dark:text-gray-300 mb-6 text-sm leading-relaxed">
+                    {message}
+                </p>
+                <button 
+                    onClick={onButtonClick}
+                    className="w-full py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold shadow-lg transition-transform hover:scale-105"
+                >
+                    {buttonText}
+                </button>
+            </div>
+        </div>
+    );
+};
+
 // ... (SUB-COMPONENTES MANTIDOS: NotificationModal, LowMarginAlertModal, BlockScreen, SystemStatusFeedbackModal, ExpirationAlertModal, EcommerceLossWarningModal, STATIC_ACCOUNTS) ...
 const NotificationModal: React.FC<{ isOpen: boolean; type: 'success' | 'error'; message: string; onClose: () => void }> = ({ isOpen, type, message, onClose }) => {
     if (!isOpen) return null;
@@ -513,13 +584,8 @@ const Layout: React.FC = () => {
                         // Switch tab and show policies immediately
                         setActivePage('ecommerce');
                         setShowEcommercePolicies(true); // New state to trigger modal
-                        setPaymentSuccessType(null); // Clear success type to close standard modal if any
                     } else {
-                        // For other types, let the standard modal handle or just refresh
-                        // (Standard success modal is handled inside Dashboard usually, but we are lifting state)
-                        // If it's standard, we can reload or show notification
-                         setNotification({ isOpen: true, type: 'success', message: 'Pagamento confirmado com sucesso!' });
-                         setPaymentSuccessType(null);
+                        // No more standard modal logic here, UI is now handled by `paymentSuccessType` rendering PaymentSuccessModal
                     }
                 }
             } catch (error) {
@@ -738,13 +804,6 @@ const Layout: React.FC = () => {
             return (
                 <div className="relative">
                     <EcommerceOrders goals={goals} onOrderUpdate={refreshEcommerceData} products={products} />
-                     {/* The modal is handled inside EcommerceOrders via internal state usually, 
-                         but here we are forcing it via layout prop passing or directly rendering the Modal 
-                         component on top if desired. 
-                         Actually, EcommerceOrders already has the policy modal logic inside it triggered by `goals` state.
-                         We updated `goals` in the payment return logic, so `EcommerceOrders` should 
-                         detect `ecommercePolicies.configured === false` and show it automatically.
-                     */}
                 </div>
             );
         }
@@ -783,6 +842,15 @@ const Layout: React.FC = () => {
 
     return (
         <div className="flex h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden">
+            {/* PaymentSuccessModal rendered based on state set by URL query params */}
+            {paymentSuccessType && (
+                <PaymentSuccessModal
+                    type={paymentSuccessType}
+                    onClose={() => setPaymentSuccessType(null)}
+                    tenantName={goals.tenantName || goals.companyInfo.name} 
+                />
+            )}
+            
             {/* MODALS RENDER */}
             <BroadcastModal messages={broadcasts} onRead={handleReadBroadcast} />
             
