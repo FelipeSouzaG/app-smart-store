@@ -59,8 +59,6 @@ const EcommerceFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, goals,
     };
 
     const handlePriorityChange = (id: number, newPriority: number) => {
-        // Swap priorities logic could be complex, for MVP simply allow changing.
-        // Ideally, ensure uniqueness, but let's trust the user or just capture the list order.
         setDomains(prev => prev.map(d => 
             d.id === id ? { ...d, priority: newPriority } : d
         ).sort((a, b) => a.priority - b.priority));
@@ -74,6 +72,11 @@ const EcommerceFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, goals,
             generatedUrl: isTrial ? `https://${goals.tenantName}-smart-commerce.local.fluxoclean.com.br` : undefined,
             domainPreferences: !isTrial ? domains.map(d => ({ domain: d.value, priority: d.priority })) : [],
             requestedAt: new Date(),
+            // Legal Data Injection
+            legalAgreement: {
+                version: 'v1.1-ecommerce',
+                userAgent: navigator.userAgent
+            }
         };
 
         onSubmit(payload);
@@ -83,8 +86,6 @@ const EcommerceFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, goals,
     const today = new Date();
     const trialEnd = new Date(trialEndsAt);
     const daysRemaining = Math.max(0, Math.ceil((trialEnd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
-    // Suppose extensions add 30 days each. 
-    // Total potential = current remaining + (2 - current_used) * 30
     const potentialExtensions = Math.max(0, 2 - extensionCount);
     const totalPotentialDays = daysRemaining + (potentialExtensions * 30);
 
@@ -214,16 +215,39 @@ const EcommerceFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, goals,
                         </div>
                     )}
 
-                    <div className="pt-2">
-                        <label className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors">
+                    {/* LEGAL CHECKBOX & CARD */}
+                    <div className="pt-2 border-t dark:border-gray-700">
+                        <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg mb-3 border border-gray-200 dark:border-gray-600">
+                            <h4 className="font-bold text-gray-800 dark:text-white text-sm mb-2">Termos de Responsabilidade e Uso</h4>
+                            <ul className="list-disc ml-4 text-xs text-gray-600 dark:text-gray-300 space-y-1">
+                                <li>Declaro ser o responsável legal pelo conteúdo, ofertas e produtos disponibilizados na loja virtual.</li>
+                                {isTrial ? (
+                                    <li>Estou ciente que o subdomínio fornecido é de propriedade da FluxoClean e seu uso indevido pode gerar cancelamento.</li>
+                                ) : (
+                                    <li>Autorizo a FluxoClean a registrar o domínio escolhido em meu nome ou da empresa e configurar a infraestrutura necessária.</li>
+                                )}
+                                <li>Isento a plataforma de responsabilidade sobre chargebacks, fraudes de terceiros ou entregas não realizadas (Seção 7 dos Termos).</li>
+                                {!isTrial && <li>Estou ciente que a taxa de adesão/migração não é reembolsável após o registro do domínio.</li>}
+                            </ul>
+                            <a 
+                                href="https://fluxoclean.com.br/contract" 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="block mt-3 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
+                            >
+                                Ler Contrato Completo
+                            </a>
+                        </div>
+
+                        <label className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors">
                             <input 
                                 type="checkbox" 
                                 checked={agreed}
                                 onChange={e => setAgreed(e.target.checked)}
-                                className="w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
+                                className="mt-1 w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
                             />
-                            <span className="text-sm text-gray-700 dark:text-gray-300">
-                                Confirmo os dados acima e autorizo a solicitação de serviço.
+                            <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">
+                                Li, compreendi e concordo com os Termos de Uso e Responsabilidade específicos para E-commerce.
                             </span>
                         </label>
                     </div>
@@ -237,7 +261,7 @@ const EcommerceFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, goals,
                         disabled={!agreed || (!isTrial && domains.some(d => !d.isValid))}
                         className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-md transform transition hover:scale-105 disabled:bg-gray-400 disabled:scale-100 disabled:cursor-not-allowed"
                     >
-                        Ir para Pagamento
+                        {isTrial ? 'Ativar Degustação' : 'Ir para Pagamento'}
                     </button>
                 </div>
             </div>
