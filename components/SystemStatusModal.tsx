@@ -520,7 +520,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
     const isProvisioning = !!activeUpgrade;
 
     return (
-        <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-120 p-4">
+        <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-[120] p-4">
             <NotificationModal isOpen={notification.isOpen} type={notification.type} message={notification.message} onClose={() => setNotification({ ...notification, isOpen: false })} />
 
             {paymentRequest && mpPublicKey && (
@@ -776,3 +776,4 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
 };
 
 export default SystemStatusModal;
+
