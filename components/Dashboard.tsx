@@ -365,136 +365,138 @@ const Dashboard: React.FC<DashboardProps> = ({ transactions, ticketSales, produc
     }
 
     return (
-        <div className="space-y-6">
+        <>
             {isGoalsModalOpen && <GoalsModal currentGoals={goals} onSave={onSaveGoals} onClose={() => setIsGoalsModalOpen(false)}/>}
             {isStatusModalOpen && <SystemStatusModal onClose={() => setIsStatusModalOpen(false)} />}
             
-            <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-                 <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
-                 <div className="flex flex-wrap items-center gap-2">
-                    <label htmlFor="competency-picker" className="text-sm font-medium text-gray-700 dark:text-gray-300">Competência:</label>
-                    <input 
-                        type="month" 
-                        id="competency-picker"
-                        value={competency}
-                        onChange={handleCompetencyChange}
-                        className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    />
-                    <div className="flex gap-2 mt-2 sm:mt-0">
-                         <button onClick={handleSystemStatus} className="px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-medium rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 shadow-md transition-transform transform hover:scale-105">
-                            Status
-                        </button>
-                         <button onClick={() => setIsGoalsModalOpen(true)} className="px-3 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 shadow-md transition-transform transform hover:scale-105">
-                            Configurar
-                        </button>
+            <div className="space-y-6">
+                <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
+                     <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white">Dashboard</h1>
+                     <div className="flex flex-wrap items-center gap-2">
+                        <label htmlFor="competency-picker" className="text-sm font-medium text-gray-700 dark:text-gray-300">Competência:</label>
+                        <input 
+                            type="month" 
+                            id="competency-picker"
+                            value={competency}
+                            onChange={handleCompetencyChange}
+                            className="px-2 py-1 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                        />
+                        <div className="flex gap-2 mt-2 sm:mt-0">
+                             <button onClick={handleSystemStatus} className="px-3 py-2 bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-200 text-xs font-medium rounded-lg hover:bg-gray-300 dark:hover:bg-gray-600 shadow-md transition-transform transform hover:scale-105">
+                                Status
+                            </button>
+                             <button onClick={() => setIsGoalsModalOpen(true)} className="px-3 py-2 bg-indigo-600 text-white text-xs font-medium rounded-lg hover:bg-indigo-700 shadow-md transition-transform transform hover:scale-105">
+                                Configurar
+                            </button>
+                        </div>
                     </div>
                 </div>
-            </div>
-            
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
-                 {/* Financial Highlight Card (New) */}
-                 <CashFlowCard balance={kpis.cashBalance} in={kpis.totalInflows} out={kpis.totalOutflows} />
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 lg:gap-6">
+                     {/* Financial Highlight Card (New) */}
+                     <CashFlowCard balance={kpis.cashBalance} in={kpis.totalInflows} out={kpis.totalOutflows} />
 
-                 <KpiCard 
-                    title="Lucro Líquido (Operacional)" 
-                    value={`R$ ${formatCurrencyNumber(kpis.currentNetProfit)}`} 
-                    note={`Objetivo: R$ ${formatCurrencyNumber(kpis.goals.netProfit)}`} 
-                    colorClass={kpis.currentNetProfit >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}
-                 />
-                 <KpiCard title="Custos Fixos do Mês" value={`R$ ${formatCurrencyNumber(kpis.fixedCosts)}`} note="Soma das despesas fixas pagas" />
-                 <KpiCard title="Margem de Contribuição" value={`${kpis.currentAvgContributionMargin.toFixed(2)}%`} note={`Previsto: ${kpis.goals.predictedAvgMargin}%`} />
-                 
-                 <KpiCard title="Projeção de Faturamento" value={`R$ ${formatCurrencyNumber(kpis.monthlyForecast)}`} note="Baseado no ritmo de vendas" />
-                 <ProgressKpiCard 
-                    title="Progresso da Meta de Faturamento" 
-                    mainValue={`R$ ${formatCurrencyNumber(kpis.currentRevenue)}`}
-                    progress={kpis.progressPercentage}
-                    note={`Meta: R$ ${formatCurrencyNumber(kpis.totalRevenueGoal)} (${kpis.progressPercentage.toFixed(1)}%)`}
-                />
-                <ProgressKpiCard 
-                    title="Progresso da Meta de Giro" 
-                    mainValue={kpis.projectedInventoryTurnover.toFixed(2)}
-                    progress={(kpis.projectedInventoryTurnover / kpis.goals.inventoryTurnoverGoal) * 100} 
-                    note={`Giro Projetado | Meta: ${kpis.goals.inventoryTurnoverGoal.toFixed(2)}`} 
-                />
-                <StockLevelCard title="Nível de Estoque" summary={kpis.stockLevelSummary} />
-            </div>
+                     <KpiCard 
+                        title="Lucro Líquido (Operacional)" 
+                        value={`R$ ${formatCurrencyNumber(kpis.currentNetProfit)}`} 
+                        note={`Objetivo: R$ ${formatCurrencyNumber(kpis.goals.netProfit)}`} 
+                        colorClass={kpis.currentNetProfit >= 0 ? "text-green-600 dark:text-green-400" : "text-red-600 dark:text-red-400"}
+                     />
+                     <KpiCard title="Custos Fixos do Mês" value={`R$ ${formatCurrencyNumber(kpis.fixedCosts)}`} note="Soma das despesas fixas pagas" />
+                     <KpiCard title="Margem de Contribuição" value={`${kpis.currentAvgContributionMargin.toFixed(2)}%`} note={`Previsto: ${kpis.goals.predictedAvgMargin}%`} />
+                     
+                     <KpiCard title="Projeção de Faturamento" value={`R$ ${formatCurrencyNumber(kpis.monthlyForecast)}`} note="Baseado no ritmo de vendas" />
+                     <ProgressKpiCard 
+                        title="Progresso da Meta de Faturamento" 
+                        mainValue={`R$ ${formatCurrencyNumber(kpis.currentRevenue)}`}
+                        progress={kpis.progressPercentage}
+                        note={`Meta: R$ ${formatCurrencyNumber(kpis.totalRevenueGoal)} (${kpis.progressPercentage.toFixed(1)}%)`}
+                    />
+                    <ProgressKpiCard 
+                        title="Progresso da Meta de Giro" 
+                        mainValue={kpis.projectedInventoryTurnover.toFixed(2)}
+                        progress={(kpis.projectedInventoryTurnover / kpis.goals.inventoryTurnoverGoal) * 100} 
+                        note={`Giro Projetado | Meta: ${kpis.goals.inventoryTurnoverGoal.toFixed(2)}`} 
+                    />
+                    <StockLevelCard title="Nível de Estoque" summary={kpis.stockLevelSummary} />
+                </div>
 
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg flex flex-col justify-between">
-                    <div>
-                        <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Margem Estoque/Produto</h2>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">Média Margem Real (Ativos)</p>
-                        <p className="mt-2 text-4xl font-bold text-indigo-600 dark:text-indigo-400">
-                            {kpis.marginMetrics.activeMarginAvg.toFixed(2)}%
-                        </p>
-                        <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
-                            Representa <span className="font-bold text-gray-700 dark:text-gray-300">{kpis.marginMetrics.activeProductPercentage.toFixed(1)}%</span> do mix de produtos (Ruptura, Risco, Segurança).
-                        </p>
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg flex flex-col justify-between">
+                        <div>
+                            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">Margem Estoque/Produto</h2>
+                            <p className="text-sm text-gray-500 dark:text-gray-400">Média Margem Real (Ativos)</p>
+                            <p className="mt-2 text-4xl font-bold text-indigo-600 dark:text-indigo-400">
+                                {kpis.marginMetrics.activeMarginAvg.toFixed(2)}%
+                            </p>
+                            <p className="mt-2 text-sm text-gray-500 dark:text-gray-400">
+                                Representa <span className="font-bold text-gray-700 dark:text-gray-300">{kpis.marginMetrics.activeProductPercentage.toFixed(1)}%</span> do mix de produtos (Ruptura, Risco, Segurança).
+                            </p>
+                        </div>
+                        <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
+                            <div className="flex justify-between items-center">
+                                <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Média Geral (Todos):</span>
+                                <span className="text-lg font-semibold text-gray-700 dark:text-gray-300">{kpis.marginMetrics.overallMarginAvg.toFixed(2)}%</span>
+                            </div>
+                        </div>
                     </div>
-                    <div className="mt-6 pt-4 border-t border-gray-200 dark:border-gray-700">
-                        <div className="flex justify-between items-center">
-                            <span className="text-sm font-medium text-gray-500 dark:text-gray-400">Média Geral (Todos):</span>
-                            <span className="text-lg font-semibold text-gray-700 dark:text-gray-300">{kpis.marginMetrics.overallMarginAvg.toFixed(2)}%</span>
+
+                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
+                        <h2 className="text-xl font-semibold mb-4">Top 10 Mais Vendidos</h2>
+                         <div className="space-y-3 max-h-96 overflow-y-auto">
+                            {top10SoldProducts.length === 0 ? <p className="text-gray-500">Nenhuma venda de produto no período.</p> : top10SoldProducts.map((p, i) => (
+                                <div key={p.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                    <div className="flex items-center overflow-hidden">
+                                        <span className="text-sm font-bold w-8 shrink-0">{i + 1}.</span>
+                                        <div className="truncate">
+                                            <p className="font-medium text-sm truncate">{p.name}</p>
+                                            <p className="text-xs text-gray-400">Estoque: {p.currentStock}</p>
+                                        </div>
+                                    </div>
+                                    <p className="font-bold text-indigo-500 ml-2 shrink-0">{p.quantitySold} <span className="font-normal text-xs">unid.</span></p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                     <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
+                        <h2 className="text-xl font-semibold mb-4">Top 10 Menor Giro</h2>
+                         <div className="space-y-3 max-h-96 overflow-y-auto">
+                            {top10LowestTurnoverProducts.length === 0 ? <p className="text-gray-500">Nenhum produto com estoque.</p> : top10LowestTurnoverProducts.map((p, i) => (
+                                 <div key={p.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                    <div className="flex items-center overflow-hidden">
+                                        <span className="text-sm font-bold w-8 shrink-0">{i + 1}.</span>
+                                        <div className="truncate">
+                                            <p className="font-medium text-sm truncate">{p.name}</p>
+                                            <p className="text-xs text-gray-400">Vendidos: {p.quantitySold} | Estoque: {p.currentStock}</p>
+                                        </div>
+                                    </div>
+                                    <p className={`font-bold text-xs shrink-0 ml-2 ${p.turnoverRatio! === 0 ? 'text-red-500' : 'text-yellow-500'}`}>Giro: {p.turnoverRatio!.toFixed(2)}</p>
+                                </div>
+                            ))}
                         </div>
                     </div>
                 </div>
 
                  <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
-                    <h2 className="text-xl font-semibold mb-4">Top 10 Mais Vendidos</h2>
-                     <div className="space-y-3 max-h-96 overflow-y-auto">
-                        {top10SoldProducts.length === 0 ? <p className="text-gray-500">Nenhuma venda de produto no período.</p> : top10SoldProducts.map((p, i) => (
-                            <div key={p.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                                <div className="flex items-center overflow-hidden">
-                                    <span className="text-sm font-bold w-8 shrink-0">{i + 1}.</span>
-                                    <div className="truncate">
-                                        <p className="font-medium text-sm truncate">{p.name}</p>
-                                        <p className="text-xs text-gray-400">Estoque: {p.currentStock}</p>
-                                    </div>
-                                </div>
-                                <p className="font-bold text-indigo-500 ml-2 shrink-0">{p.quantitySold} <span className="font-normal text-xs">unid.</span></p>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-                 <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
-                    <h2 className="text-xl font-semibold mb-4">Top 10 Menor Giro</h2>
-                     <div className="space-y-3 max-h-96 overflow-y-auto">
-                        {top10LowestTurnoverProducts.length === 0 ? <p className="text-gray-500">Nenhum produto com estoque.</p> : top10LowestTurnoverProducts.map((p, i) => (
-                             <div key={p.id} className="flex justify-between items-center p-2 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
-                                <div className="flex items-center overflow-hidden">
-                                    <span className="text-sm font-bold w-8 shrink-0">{i + 1}.</span>
-                                    <div className="truncate">
-                                        <p className="font-medium text-sm truncate">{p.name}</p>
-                                        <p className="text-xs text-gray-400">Vendidos: {p.quantitySold} | Estoque: {p.currentStock}</p>
-                                    </div>
-                                </div>
-                                <p className={`font-bold text-xs shrink-0 ml-2 ${p.turnoverRatio! === 0 ? 'text-red-500' : 'text-yellow-500'}`}>Giro: {p.turnoverRatio!.toFixed(2)}</p>
-                            </div>
-                        ))}
-                    </div>
+                    <h2 className="text-xl font-semibold mb-4">Insights de Gestão com IA</h2>
+                    <button
+                        onClick={handleGetInsights}
+                        disabled={isLoadingInsights}
+                        className="w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-all duration-300"
+                    >
+                        {isLoadingInsights ? 'Analisando...' : 'Gerar Análise Estratégica'}
+                    </button>
+                    {isLoadingInsights && <div className="mt-4 text-center animate-pulse text-indigo-500">Analisando dados e gerando recomendações... 🧠</div>}
+                    {insights && (
+                        <div className="mt-4 p-4 bg-indigo-50 dark:bg-gray-700 rounded-lg">
+                            <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base text-gray-700 dark:text-gray-200">
+                               {insights}
+                            </pre>
+                        </div>
+                    )}
                 </div>
             </div>
-
-             <div className="bg-white dark:bg-gray-800 p-6 rounded-xl shadow-lg">
-                <h2 className="text-xl font-semibold mb-4">Insights de Gestão com IA</h2>
-                <button
-                    onClick={handleGetInsights}
-                    disabled={isLoadingInsights}
-                    className="w-full sm:w-auto px-6 py-3 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 disabled:bg-indigo-400 disabled:cursor-not-allowed transition-all duration-300"
-                >
-                    {isLoadingInsights ? 'Analisando...' : 'Gerar Análise Estratégica'}
-                </button>
-                {isLoadingInsights && <div className="mt-4 text-center animate-pulse text-indigo-500">Analisando dados e gerando recomendações... 🧠</div>}
-                {insights && (
-                    <div className="mt-4 p-4 bg-indigo-50 dark:bg-gray-700 rounded-lg">
-                        <pre className="whitespace-pre-wrap font-sans text-sm sm:text-base text-gray-700 dark:text-gray-200">
-                           {insights}
-                        </pre>
-                    </div>
-                )}
-            </div>
-        </div>
+        </>
     );
 };
 
