@@ -63,6 +63,11 @@ const BundleMigrationModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, tena
             plan: 'bundle', // Identifica o plano no backend
             domainPreferences: domains.map(d => ({ domain: d.value, priority: d.priority })),
             requestedAt: new Date(),
+            // Legal Data Injection
+            legalAgreement: {
+                version: 'v1.1-bundle',
+                userAgent: navigator.userAgent
+            }
         };
 
         onSubmit(payload);
@@ -145,6 +150,24 @@ const BundleMigrationModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, tena
                     </div>
 
                     <div className="pt-4 border-t dark:border-gray-700">
+                        <div className="bg-gray-100 dark:bg-gray-700 p-4 rounded-lg mb-3 border border-gray-200 dark:border-gray-600">
+                            <h4 className="font-bold text-gray-800 dark:text-white text-sm mb-2">Termos de Responsabilidade e Mandato</h4>
+                            <ul className="list-disc ml-4 text-xs text-gray-600 dark:text-gray-300 space-y-1">
+                                <li><strong>Mandato:</strong> Autorizo a FluxoClean a registrar o domínio escolhido em meu nome junto ao Registro.br e demais órgãos competentes.</li>
+                                <li><strong>Responsabilidade:</strong> Declaro ser o único responsável pelo conteúdo publicado no site.</li>
+                                <li><strong>Cancelamento:</strong> Estou ciente que a taxa de registro do domínio (inclusa no valor) não é reembolsável em caso de desistência imediata.</li>
+                                <li><strong>Uso Indevido:</strong> A venda de produtos ilegais resultará no bloqueio imediato da conta.</li>
+                            </ul>
+                            <a 
+                                href="https://fluxoclean.com.br/contract" 
+                                target="_blank" 
+                                rel="noreferrer" 
+                                className="block mt-3 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
+                            >
+                                Ler Contrato Completo
+                            </a>
+                        </div>
+
                         <label className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors">
                             <input 
                                 type="checkbox" 
@@ -152,8 +175,8 @@ const BundleMigrationModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, tena
                                 onChange={e => setAgreed(e.target.checked)}
                                 className="mt-1 w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
                             />
-                            <span className="text-sm text-gray-700 dark:text-gray-300">
-                                Autorizo a migração para o ambiente Exclusive e a contratação do plano Bundle (R$ 297/mês), concordando com os Termos de Uso.
+                            <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">
+                                Li, compreendi e concordo com os Termos e autorizo a migração para o plano Bundle (R$ 297/mês).
                             </span>
                         </label>
                     </div>
