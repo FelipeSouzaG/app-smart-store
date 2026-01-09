@@ -796,6 +796,49 @@ const Layout: React.FC = () => {
     const handleUpdateSupplier = async (d: any) => { if(await apiCall(`suppliers/${d.id}`, 'PUT', d)) fetchData('suppliers', setSuppliers); };
     const handleDeleteSupplier = async (id: string) => { if(await apiCall(`suppliers/${id}`, 'DELETE')) fetchData('suppliers', setSuppliers); };
 
+    // --- LOW MARGIN CHECK LOGIC (Restored) ---
+    useEffect(() => {
+        // Só executa se o sistema carregou e os dados essenciais existem
+        if (!isBootstrapComplete || products.length === 0 || !goals) return;
+
+        // Não sobrepor outros modais prioritários
+        if (
+            showStatusModal || showWelcomeModal || showSetupWizard || 
+            showGoogleVerification || showGoogleForm || showEcommerceDetail || 
+            showEcommerceForm || showSingleTenantDetail || showBundleMigrationModal || 
+            showEcomLossWarning || expirationAlert.isOpen || growthAlertVariant ||
+            broadcasts.length > 0 // Espera terminar os broadcasts
+        ) return;
+
+        // Verifica se já foi visto nesta sessão
+        const seenSession = sessionStorage.getItem('marginAlertSeen');
+        if (seenSession) return;
+
+        // Cálculo de Margem (Réplica da lógica de Products.tsx)
+        const hasLowMargin = products.some(p => {
+            // Ignora produtos com estoque zerado ou negativo (não estão sendo vendidos ativamente)
+            if (p.stock <= 0) return false;
+
+            const taxAmount = p.price * (goals.effectiveTaxRate / 100);
+            const maxFeeAmount = p.price * (goals.feeCreditInstallment / 100); // Pior cenário (Crédito Parc)
+            const realMarginValue = p.price - p.cost - taxAmount - maxFeeAmount;
+            const realMarginPercent = p.price > 0 ? (realMarginValue / p.price) * 100 : 0;
+
+            return realMarginPercent < goals.minContributionMargin;
+        });
+
+        if (hasLowMargin) {
+            setShowLowMarginAlert(true);
+        }
+
+    }, [
+        isBootstrapComplete, products, goals, 
+        showStatusModal, showWelcomeModal, showSetupWizard, 
+        showGoogleVerification, showGoogleForm, showEcommerceDetail, 
+        showEcommerceForm, showSingleTenantDetail, showBundleMigrationModal, 
+        showEcomLossWarning, expirationAlert.isOpen, growthAlertVariant,
+        broadcasts
+    ]);
 
     // --- RENDER CONTENT SWITCHER ---
     const renderContent = () => {
