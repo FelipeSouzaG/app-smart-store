@@ -1,0 +1,7 @@
+{
+  "name": "Smart Store",
+  "description": "A sua loja Inteligente",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
