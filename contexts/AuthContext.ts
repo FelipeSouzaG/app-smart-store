@@ -3,8 +3,8 @@ import type { User } from '../types';
 
 interface AuthContextType {
   user: User | null;
-  token: string | null; // Mantido apenas para compatibilidade durante transição, será null na maioria dos casos
-  login: (user: User, token: string) => void; // Token ainda passado no handshake inicial
+  token: string | null;
+  login: (user: User, token: string) => void;
   logout: () => void;
   apiCall: (
     endpoint: string,
