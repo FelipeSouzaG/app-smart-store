@@ -86,9 +86,7 @@ const EcommerceFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, goals,
     const today = new Date();
     const trialEnd = new Date(trialEndsAt);
     const daysRemaining = Math.max(0, Math.ceil((trialEnd.getTime() - today.getTime()) / (1000 * 60 * 60 * 24)));
-    const potentialExtensions = Math.max(0, 2 - extensionCount);
-    const totalPotentialDays = daysRemaining + (potentialExtensions * 30);
-
+    
     if (!isOpen) return null;
 
     return (
@@ -111,19 +109,14 @@ const EcommerceFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, goals,
                     {isTrial && (
                         <div className="space-y-6">
                             <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-xl border border-blue-100 dark:border-blue-800">
-                                <h3 className="font-bold text-blue-800 dark:text-blue-300 mb-2">Resumo do Acesso</h3>
+                                <h3 className="font-bold text-blue-800 dark:text-blue-300 mb-2">Resumo da Degustação</h3>
+                                <p className="text-sm text-gray-600 dark:text-gray-300 mb-2">
+                                    Você poderá testar todas as funcionalidades da Loja Virtual durante o período restante do seu teste.
+                                </p>
                                 <ul className="space-y-2 text-sm text-gray-600 dark:text-gray-300">
                                     <li className="flex justify-between border-b dark:border-gray-700 pb-1">
-                                        <span>Dias Restantes Atuais:</span>
+                                        <span>Dias Restantes:</span>
                                         <span className="font-bold">{daysRemaining} dias</span>
-                                    </li>
-                                    <li className="flex justify-between border-b dark:border-gray-700 pb-1">
-                                        <span>Renovações Disponíveis:</span>
-                                        <span className="font-bold">{potentialExtensions} (+{potentialExtensions * 30} dias)</span>
-                                    </li>
-                                    <li className="flex justify-between text-indigo-600 dark:text-indigo-400 font-bold pt-1">
-                                        <span>Potencial Total de Uso:</span>
-                                        <span>Até {totalPotentialDays} dias</span>
                                     </li>
                                 </ul>
                             </div>
@@ -131,17 +124,17 @@ const EcommerceFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, goals,
                             <div>
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">Seu Link de Acesso (Automático)</label>
                                 <div className="p-3 bg-gray-100 dark:bg-gray-700 rounded-lg border border-gray-300 dark:border-gray-600 font-mono text-xs sm:text-sm text-gray-800 dark:text-gray-200 break-all">
-                                    https://{goals.tenantName}-smart-commerce.local.fluxoclean.com.br
+                                    https://{goals.tenantName}.fluxoclean.com.br
                                 </div>
                                 <p className="text-xs text-gray-500 mt-1">Este link é exclusivo para sua degustação e pode ser compartilhado com clientes.</p>
                             </div>
 
                             <div className="bg-green-50 dark:bg-green-900/20 p-4 rounded-xl border border-green-100 dark:border-green-800 flex justify-between items-center">
                                 <div>
-                                    <p className="font-bold text-green-800 dark:text-green-300">Taxa de Ativação Única</p>
-                                    <p className="text-xs text-green-700 dark:text-green-400">Configuração do ambiente e servidor.</p>
+                                    <p className="font-bold text-green-800 dark:text-green-300">Custo de Ativação</p>
+                                    <p className="text-xs text-green-700 dark:text-green-400">Durante o período de teste.</p>
                                 </div>
-                                <p className="text-2xl font-bold text-green-700 dark:text-green-400">R$ 97,00</p>
+                                <p className="text-2xl font-bold text-green-700 dark:text-green-400">GRÁTIS</p>
                             </div>
                         </div>
                     )}
@@ -184,24 +177,6 @@ const EcommerceFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, goals,
                                 ))}
                             </div>
 
-                            <div className="flex items-start gap-3 p-3 bg-yellow-50 dark:bg-yellow-900/10 rounded-lg border border-yellow-100 dark:border-yellow-800">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-                                  <path d="M13.601 2.326A7.85 7.85 0 0 0 7.994 0C3.627 0 .068 3.558.064 7.926c0 1.399.366 2.76 1.057 3.965L0 16l4.204-1.102a7.9 7.9 0 0 0 3.79.965h.004c4.368 0 7.926-3.558 7.93-7.93A7.9 7.9 0 0 0 13.6 2.326zM7.994 14.521a6.6 6.6 0 0 1-3.356-.92l-.24-.144-2.494.654.666-2.433-.156-.251a6.56 6.56 0 0 1-1.007-3.505c0-3.626 2.957-6.584 6.591-6.584a6.56 6.56 0 0 1 4.66 1.931 6.56 6.56 0 0 1 1.928 4.66c-.004 3.639-2.961 6.592-6.592 6.592m3.615-4.934c-.197-.099-1.17-.578-1.353-.646-.182-.065-.315-.099-.445.099-.133.197-.513.646-.627.775-.114.133-.232.148-.43.05-.197-.1-.836-.308-1.592-.985-.59-.525-.985-1.175-1.103-1.372-.114-.198-.011-.304.088-.403.087-.088.197-.232.296-.346.1-.114.133-.198.198-.33.065-.134.034-.248-.015-.347-.05-.099-.445-1.076-.612-1.47-.16-.389-.323-.335-.445-.34-.114-.007-.247-.007-.38-.007a.73.73 0 0 0-.529.247c-.182.198-.691.677-.691 1.654s.71 1.916.81 2.049c.098.133 1.394 2.132 3.383 2.992.47.205.84.326 1.129.418.475.152.904.129 1.246.08.38-.058 1.171-.48 1.338-.943.164-.464.164-.86.114-.943-.049-.084-.182-.133-.38-.232"/>
-                                </svg>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-                                  <path d="M2 2a2 2 0 0 0-2 2v8.01A2 2 0 0 0 2 14h5.5a.5.5 0 0 0 0-1H2a1 1 0 0 1-.966-.741l5.64-3.471L8 9.583l7-4.2V8.5a.5.5 0 0 0 1 0V4a2 2 0 0 0-2-2zm3.708 6.208L1 11.105V5.383zM1 4.217V4a1 1 0 0 1 1-1h12a1 1 0 0 1 1 1v.217l-7 4.2z"/>
-                                  <path d="M14.247 14.269c1.01 0 1.587-.857 1.587-2.025v-.21C15.834 10.43 14.64 9 12.52 9h-.035C10.42 9 9 10.36 9 12.432v.214C9 14.82 10.438 16 12.358 16h.044c.594 0 1.018-.074 1.237-.175v-.73c-.245.11-.673.18-1.18.18h-.044c-1.334 0-2.571-.788-2.571-2.655v-.157c0-1.657 1.058-2.724 2.64-2.724h.04c1.535 0 2.484 1.05 2.484 2.326v.118c0 .975-.324 1.39-.639 1.39-.232 0-.41-.148-.41-.42v-2.19h-.906v.569h-.03c-.084-.298-.368-.63-.954-.63-.778 0-1.259.555-1.259 1.4v.528c0 .892.49 1.434 1.26 1.434.471 0 .896-.227 1.014-.643h.043c.118.42.617.648 1.12.648m-2.453-1.588v-.227c0-.546.227-.791.573-.791.297 0 .572.192.572.708v.367c0 .573-.253.744-.564.744-.354 0-.581-.215-.581-.8Z"/>
-                                </svg>
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" fill="currentColor" viewBox="0 0 16 16">
-                                  <path d="M10 3a1 1 0 0 1 1 1v8a1 1 0 0 1-1 1H6a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1zM6 2a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h4a2 2 0 0 0 2-2V4a2 2 0 0 0-2-2z"/>
-                                  <path d="M8 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2M1.599 4.058a.5.5 0 0 1 .208.676A7 7 0 0 0 1 8c0 1.18.292 2.292.807 3.266a.5.5 0 0 1-.884.468A8 8 0 0 1 0 8c0-1.347.334-2.619.923-3.734a.5.5 0 0 1 .676-.208m12.802 0a.5.5 0 0 1 .676.208A8 8 0 0 1 16 8a8 8 0 0 1-.923 3.734.5.5 0 0 1-.884-.468A7 7 0 0 0 15 8c0-1.18-.292-2.292-.807-3.266a.5.5 0 0 1 .208-.676M3.057 5.534a.5.5 0 0 1 .284.648A5 5 0 0 0 3 8c0 .642.12 1.255.34 1.818a.5.5 0 1 1-.93.364A6 6 0 0 1 2 8c0-.769.145-1.505.41-2.182a.5.5 0 0 1 .647-.284m9.886 0a.5.5 0 0 1 .648.284C13.855 6.495 14 7.231 14 8s-.145 1.505-.41 2.182a.5.5 0 0 1-.93-.364C12.88 9.255 13 8.642 13 8s-.12-1.255-.34-1.818a.5.5 0 0 1 .283-.648"/>
-                                </svg>
-                                <p className="text-xs text-yellow-800 dark:text-yellow-300">
-                                    <strong>Importante:</strong> Tentaremos registrar os domínios na ordem de sua prioridade. 
-                                    Caso nenhum esteja disponível, nossa equipe entrará em contato por telefone/email antes de prosseguir.
-                                </p>
-                            </div>
-
                             <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-xl border border-gray-200 dark:border-gray-600 flex justify-between items-center">
                                 <div>
                                     <p className="font-bold text-gray-800 dark:text-white">Plano Exclusive + E-commerce</p>
@@ -226,17 +201,8 @@ const EcommerceFormModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, goals,
                                 ) : (
                                     <li>Autorizo a FluxoClean a registrar o domínio escolhido em meu nome ou da empresa e configurar a infraestrutura necessária.</li>
                                 )}
-                                <li>Isento a plataforma de responsabilidade sobre chargebacks, fraudes de terceiros ou entregas não realizadas (Seção 7 dos Termos).</li>
-                                {!isTrial && <li>Estou ciente que a taxa de adesão/migração não é reembolsável após o registro do domínio.</li>}
+                                <li>Isento a plataforma de responsabilidade sobre chargebacks, fraudes de terceiros ou entregas não realizadas.</li>
                             </ul>
-                            <a 
-                                href="https://fluxoclean.com.br/contract" 
-                                target="_blank" 
-                                rel="noreferrer" 
-                                className="block mt-3 text-xs text-indigo-600 dark:text-indigo-400 hover:underline font-bold"
-                            >
-                                Ler Contrato Completo
-                            </a>
                         </div>
 
                         <label className="flex items-start gap-3 p-3 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer transition-colors">
