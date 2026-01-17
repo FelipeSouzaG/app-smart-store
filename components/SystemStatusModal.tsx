@@ -119,7 +119,7 @@ const PaymentModal: React.FC<{ request: Request, publicKey: string, onClose: () 
 }
 
 const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstRun = false, initialPaymentRequest = null, initialPublicKey = '' }) => {
-    const { token, apiCall, logout, user } = useContext(AuthContext); 
+    const { token, apiCall, logout, user } = React.useContext(AuthContext); 
     const [statusData, setStatusData] = useState<SubscriptionStatus | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     
