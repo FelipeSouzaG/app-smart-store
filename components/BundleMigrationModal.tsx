@@ -83,11 +83,11 @@ const BundleMigrationModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, tena
                 <div className="p-6 text-white text-center bg-linear-to-r from-indigo-900 to-purple-800 relative overflow-hidden">
                     <div className="relative z-10">
                         <div className="inline-flex items-center gap-2 bg-yellow-400 text-indigo-900 px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wider mb-3">
-                            <span className="animate-pulse">★</span> Oferta Especial
+                            <span className="animate-pulse">★</span> Plano Completo
                         </div>
-                        <h2 className="text-2xl font-bold mb-1">Migração Exclusive + Loja</h2>
+                        <h2 className="text-2xl font-bold mb-1">Assinatura Smart Commerce</h2>
                         <p className="text-indigo-200 text-sm">
-                            Sistema de Gestão Dedicado + E-commerce Integrado
+                            Sistema de Gestão Completo + E-commerce Profissional
                         </p>
                     </div>
                 </div>
@@ -98,7 +98,7 @@ const BundleMigrationModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, tena
                         <div className="flex-1 bg-green-50 dark:bg-green-900/20 p-4 rounded-xl border border-green-100 dark:border-green-800">
                             <h4 className="font-bold text-green-800 dark:text-green-300 text-sm mb-1">Benefício Ativado</h4>
                             <p className="text-xs text-green-700 dark:text-green-400">
-                                Ao contratar o combo, você ganha <strong>isenção da taxa de adesão</strong> (economia de R$ 97,00).
+                                Domínio próprio grátis (R$ 40/ano incluso) e configuração completa da loja.
                             </p>
                         </div>
                         <div className="flex-1 bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-100 dark:border-indigo-800 text-right">
@@ -176,7 +176,7 @@ const BundleMigrationModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, tena
                                 className="mt-1 w-5 h-5 text-indigo-600 rounded border-gray-300 focus:ring-indigo-500"
                             />
                             <span className="text-sm text-gray-700 dark:text-gray-300 font-medium">
-                                Li, compreendi e concordo com os Termos e autorizo a migração para o plano Bundle (R$ 297/mês).
+                                Li, compreendi e concordo com os Termos e autorizo a assinatura do plano Smart Commerce.
                             </span>
                         </label>
                     </div>
@@ -190,7 +190,7 @@ const BundleMigrationModal: React.FC<Props> = ({ isOpen, onClose, onSubmit, tena
                         disabled={!agreed || domains.some(d => !d.isValid)}
                         className="px-6 py-2 bg-green-600 text-white font-bold rounded-lg hover:bg-green-700 shadow-md transform transition hover:scale-105 disabled:bg-gray-400 disabled:scale-100 disabled:cursor-not-allowed flex items-center gap-2"
                     >
-                        <span>Confirmar e Pagar</span>
+                        <span>Confirmar e Assinar</span>
                         <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>
                     </button>
                 </div>
