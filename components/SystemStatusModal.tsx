@@ -12,10 +12,6 @@ import SingleTenantDetailModal from './SingleTenantDetailModal';
 import BundleMigrationModal from './BundleMigrationModal';
 import { KpiGoals } from '../types';
 
-// ============================================================================
-// TYPES & INTERFACES
-// ============================================================================
-
 interface SystemStatusModalProps {
     onClose: () => void;
     isFirstRun?: boolean;
@@ -25,7 +21,7 @@ interface SystemStatusModalProps {
 
 interface Request {
     type: 'extension' | 'upgrade' | 'migrate' | 'monthly' | 'google_maps' | 'ecommerce';
-    status: 'pending' | 'waiting_payment' | 'approved' | 'rejected' | 'completed' | 'waiting_switch';
+    status: 'pending' | 'waiting_payment' | 'approved' | 'rejected' | 'completed';
     requestedAt: string;
     amount: number;
     referenceCode: string;
@@ -44,13 +40,9 @@ interface SubscriptionStatus {
     monthlyPaymentDay?: number;
     lastPaymentDate?: string;
     billingDayConfigured?: boolean;
-    singleTenantUrl?: string; 
 }
 
-// ============================================================================
-// SUB-COMPONENTES VISUAIS (MODAIS AUXILIARES)
-// ============================================================================
-
+// ... (NotificationModal, EcommerceLossWarningModal, PaymentModal components remain) ...
 const NotificationModal: React.FC<{ isOpen: boolean; type: 'success' | 'error' | 'info'; message: string; onClose: () => void }> = ({ isOpen, type, message, onClose }) => {
     if (!isOpen) return null;
     let iconColor = 'text-gray-500';
@@ -126,45 +118,7 @@ const PaymentModal: React.FC<{ request: Request, publicKey: string, onClose: () 
     )
 }
 
-// CENA 7 - PASSO 1: Provisionamento em Andamento (Pagamento OK / status 'approved')
-const ProvisioningInProgressModal: React.FC<{ onClose: () => void }> = ({ onClose }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-130 p-4">
-        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-8 text-center animate-fade-in">
-            <div className="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-yellow-100 dark:bg-yellow-900/50 mb-6"><svg className="h-8 w-8 text-yellow-600 dark:text-yellow-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg></div>
-            <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-4">Pagamento Confirmado!</h3>
-            <p className="text-gray-500 dark:text-gray-300 mb-8 leading-relaxed">
-                Nossa equipe técnica já iniciou o provisionamento do seu servidor exclusivo. Esse processo pode levar algumas horas.<br/><br/>
-                Enquanto isso, <strong>continue utilizando o sistema normalmente aqui</strong>. Avisaremos quando seu novo ambiente estiver pronto!
-            </p>
-            <button onClick={onClose} className="w-full py-3 bg-yellow-600 hover:bg-yellow-700 text-white font-bold rounded-xl transition-all hover:scale-105 shadow-lg">Entendi, Continuar Usando</button>
-        </div>
-    </div>
-);
-
-// CENA 7 - PASSO 3: Migração Pronta (status 'waiting_switch')
-const MigrationReadyModal: React.FC<{ url: string; onMigrate: () => void }> = ({ url, onMigrate }) => (
-    <div className="fixed inset-0 bg-black bg-opacity-90 flex items-center justify-center z-130 p-4">
-         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-8 text-center animate-fade-in border-4 border-indigo-500">
-             <div className="mx-auto flex items-center justify-center h-20 w-20 rounded-full bg-indigo-100 dark:bg-indigo-900/50 mb-6 text-indigo-600 dark:text-indigo-400">
-                 <svg className="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
-             </div>
-             <h3 className="text-3xl font-black text-gray-900 dark:text-white mb-2">Está Pronto! 🚀</h3>
-             <p className="text-gray-600 dark:text-gray-300 mb-6">
-                 Seu Sistema Exclusive foi provisionado com sucesso.
-                 <br/><br/>
-                 Clique abaixo para migrar agora. Você será desconectado e deverá fazer login no novo endereço: <br/>
-                 <span className="font-mono text-xs text-indigo-500 block mt-2">{url}</span>
-             </p>
-             <button onClick={onMigrate} className="w-full py-4 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-lg rounded-xl shadow-lg transition-transform hover:scale-105">
-                 ACESSAR AMBIENTE ISOLADO
-             </button>
-         </div>
-    </div>
-);
-
-// ============================================================================
-// MAIN COMPONENT LOGIC
-// ============================================================================
+// ProvisioningInProgressModal e MigrationReadyModal REMOVIDOS.
 
 const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstRun = false, initialPaymentRequest = null, initialPublicKey = '' }) => {
     const { token, apiCall, logout } = useContext(AuthContext); 
@@ -177,8 +131,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
     
     // Success States
     const [showServiceSuccess, setShowServiceSuccess] = useState(false); 
-    const [showProvisioningInProgress, setShowProvisioningInProgress] = useState(false); 
-    const [showMigrationReady, setShowMigrationReady] = useState(false); 
     
     // Feature Modals Visibility
     const [showGoogleVerification, setShowGoogleVerification] = useState(false);
@@ -204,7 +156,9 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
     
     const isProcessingRef = useRef(false);
 
-    // 1. Initial Data Load & Deep Link Handling
+    // ... (Effects and API functions same as before, simplified status check) ...
+
+     // 1. Initial Data Load & Deep Link Handling
     useEffect(() => {
         if (initialPaymentRequest && initialPublicKey) {
             setMpPublicKey(initialPublicKey);
@@ -220,18 +174,16 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
         return () => { if (pollingRef.current) clearInterval(pollingRef.current); };
     }, [token]);
 
-    // 3. Payment Status Polling (When modal is open or tab focused)
+    // 3. Payment Status Polling
     useEffect(() => {
         const handleVisibilityChange = () => {
             if (document.visibilityState === 'visible' && paymentRequest) {
-                checkPaymentStatus(paymentRequest, true); // Auto check
+                checkPaymentStatus(paymentRequest, true); 
             }
         };
         document.addEventListener("visibilitychange", handleVisibilityChange);
         return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
     }, [paymentRequest]);
-
-    // --- API FUNCTIONS ---
 
     const fetchStatus = async (force = false) => {
         if (isProcessingRef.current && !force) return;
@@ -251,19 +203,11 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                 setStatusData(data);
                 if (data.monthlyPaymentDay) setSelectedDay(data.monthlyPaymentDay);
 
-                // Auto-detection of completion via polling (e.g. webhook updated DB)
                 if (paymentRequest) {
                     const updatedReq = data.requests.find((r: Request) => r.referenceCode === paymentRequest.referenceCode);
-                    if (updatedReq && (updatedReq.status === 'approved' || updatedReq.status === 'completed' || updatedReq.status === 'waiting_switch')) {
+                    if (updatedReq && (updatedReq.status === 'approved' || updatedReq.status === 'completed')) {
                         handlePaymentSuccess(paymentRequest);
                     }
-                }
-
-                // CENA 7 - PASSO 3: Checagem de Migração Pronta (waiting_switch)
-                // Se existe uma request com status 'waiting_switch', o usuário deve migrar.
-                const migrationReadyReq = data.requests.find((r: Request) => r.type === 'upgrade' && r.status === 'waiting_switch');
-                if (migrationReadyReq && data.plan !== 'single_tenant') {
-                    setShowMigrationReady(true);
                 }
             }
         } catch (error) { console.error(error); } finally { setIsLoading(false); }
@@ -281,8 +225,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
             }
         } catch (e) { console.error(e); }
     };
-
-    // --- PAYMENT HANDLING ---
 
     const checkPaymentStatus = async (request: Request, isAutoPoll: boolean) => {
         if (isProcessingRef.current) return;
@@ -307,55 +249,23 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
 
     const handlePaymentSuccess = (request: Request) => {
         setPaymentRequest(null);
-        if (request.type === 'upgrade' || request.type === 'migrate') {
-            setShowProvisioningInProgress(true);
-        } else {
-            setShowServiceSuccess(true);
-        }
-        fetchStatus(true); // Sync UI
+        setShowServiceSuccess(true);
+        fetchStatus(true);
     };
 
     const handleManualClosePayment = async () => {
         if (!paymentRequest) return;
-        
         const ref = paymentRequest.referenceCode;
-        setPaymentRequest(null); // Close UI immediately
-
-        // ABORT OPERATION LOGIC: DELETE PENDING REQUEST
+        setPaymentRequest(null);
         try {
              await fetch(`${SAAS_API_URL}/subscription/request/${ref}`, {
                 method: 'DELETE',
                 headers: { 'Authorization': `Bearer ${token}` }
              });
-             setNotification({ isOpen: true, type: 'info', message: 'Operação cancelada. Nenhuma cobrança foi gerada.' });
+             setNotification({ isOpen: true, type: 'info', message: 'Operação cancelada.' });
              fetchStatus(true);
-        } catch (e) {
-             console.error("Error cancelling request", e);
-        }
+        } catch (e) { console.error(e); }
     };
-
-    // --- FINAL MIGRATION HANDLER ---
-    
-    const handleFinalizeMigration = async () => {
-        try {
-            const response = await fetch(`${SAAS_API_URL}/subscription/finalize-migration`, {
-                method: 'POST',
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            
-            if (response.ok) {
-                const data = await response.json();
-                logout(); // Logout central
-                window.location.href = data.redirectUrl; // Redirect to isolated app
-            } else {
-                setNotification({ isOpen: true, type: 'error', message: 'Erro ao migrar. Contate o suporte.' });
-            }
-        } catch (e) {
-            setNotification({ isOpen: true, type: 'error', message: 'Erro de conexão.' });
-        }
-    };
-
-    // --- SERVICE REQUEST FLOWS ---
 
     const handleRequest = async (type: 'extension' | 'upgrade' | 'migrate' | 'monthly' | 'google_maps' | 'ecommerce', payload?: any) => {
         if (type === 'google_maps' && !payload) {
@@ -363,7 +273,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
             setShowGoogleForm(true); 
             return;
         }
-
         try {
             const bodyData = { type, payload };
             const response = await fetch(`${SAAS_API_URL}/subscription/request`, {
@@ -372,11 +281,10 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                 body: JSON.stringify(bodyData)
             });
             const data = await response.json();
-            
             if (response.ok) {
                 if (data.publicKey) setMpPublicKey(data.publicKey);
                 if (data.request) {
-                    setPaymentRequest(data.request); // Open Payment Modal
+                    setPaymentRequest(data.request);
                 } 
             } else { 
                 setNotification({ isOpen: true, type: 'error', message: data.message }); 
@@ -386,23 +294,10 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
         }
     };
 
-    // --- FORM SUBMISSION HANDLERS ---
-
-    const handleGoogleFormSubmit = (formData: any) => {
-        setShowGoogleForm(false);
-        handleRequest('google_maps', formData);
-    };
-
-    const handleEcommerceFormSubmit = (formData: any) => {
-        setShowEcommerceForm(false);
-        // Standard Ecommerce Request (For Existing Exclusive or Trial)
-        handleRequest('ecommerce', formData);
-    };
-
-    const handleBundleSubmit = (formData: any) => {
-        setShowBundleMigration(false);
-        handleRequest('upgrade', formData);
-    }
+    // ... (Form submission handlers remain mostly same) ...
+     const handleGoogleFormSubmit = (formData: any) => { setShowGoogleForm(false); handleRequest('google_maps', formData); };
+    const handleEcommerceFormSubmit = (formData: any) => { setShowEcommerceForm(false); handleRequest('ecommerce', formData); };
+    const handleBundleSubmit = (formData: any) => { setShowBundleMigration(false); handleRequest('upgrade', formData); }
 
     const handleUpdateDay = async () => {
         setIsUpdatingDay(true);
@@ -412,17 +307,9 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                 headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
                 body: JSON.stringify({ day: selectedDay })
             });
-            if (isFirstRun) {
-                window.location.reload(); 
-            } else {
-                setNotification({ isOpen: true, type: 'success', message: "Dia de pagamento atualizado!" });
-            }
-        } catch (e) {
-            setNotification({ isOpen: true, type: 'error', message: "Erro ao salvar." });
-        } finally { setIsUpdatingDay(false); }
+            if (isFirstRun) { window.location.reload(); } else { setNotification({ isOpen: true, type: 'success', message: "Dia de pagamento atualizado!" }); }
+        } catch (e) { setNotification({ isOpen: true, type: 'error', message: "Erro ao salvar." }); } finally { setIsUpdatingDay(false); }
     };
-
-    // --- UPGRADE CHECK LOGIC (DATA LOSS WARNING) ---
 
     const handleCheckUpgradeBasic = () => {
         const hasActiveTrialEcommerce = statusData?.requests?.some((r: any) => 
@@ -449,9 +336,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
         }
     };
 
-
     // --- RENDER ---
-
     if (isLoading) return <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-130 text-white">Carregando...</div>;
 
     // Feature Modals
@@ -486,14 +371,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
         );
     }
 
-    if (showProvisioningInProgress) {
-        return <ProvisioningInProgressModal onClose={() => { setShowProvisioningInProgress(false); onClose(); }} />;
-    }
-
-    if (showMigrationReady && statusData?.singleTenantUrl) {
-        return <MigrationReadyModal url={statusData.singleTenantUrl} onMigrate={handleFinalizeMigration} />;
-    }
-
     if (!statusData) return null;
 
     // --- MAIN UI LAYOUT ---
@@ -504,7 +381,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
     const paidThisMonth = lastPaid && lastPaid.getMonth() === today.getMonth() && lastPaid.getFullYear() === today.getFullYear();
     const subEndsAt = statusData.subscriptionEndsAt ? new Date(statusData.subscriptionEndsAt) : null;
     const isCoverageActive = (subEndsAt && subEndsAt > today) || paidThisMonth;
-    // Simplified checks for UI rendering logic
     const isLate = !isCoverageActive && (statusData.status === 'expired' || statusData.status === 'blocked');
 
     const isSecondExtensionAllowed = statusData.extensionCount === 1 && trialDaysRemaining <= 5;
@@ -512,16 +388,11 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
 
     const mapsApproved = statusData.requests.find(r => r.type === 'google_maps' && r.status === 'approved');
     const mapsCompleted = statusData.requests.find(r => r.type === 'google_maps' && r.status === 'completed') || googleStatus === 'verified';
-    
     const ecommerceRequest = statusData.requests.find(r => r.type === 'ecommerce' && (r.status === 'completed' || r.status === 'approved'));
-
-    // --- CORREÇÃO DE PROVISIONAMENTO: Detecta se há um upgrade 'approved' mas não 'completed' ---
-    const activeUpgrade = statusData.requests.find(r => r.type === 'upgrade' && r.status === 'approved');
-    const isProvisioning = !!activeUpgrade;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-120 p-4">
-            <NotificationModal isOpen={notification.isOpen} type={notification.type} message={notification.message} onClose={() => setNotification({ ...notification, isOpen: false })} />
+            <NotificationModal isOpen={notification.isOpen} type={notification.type as any} message={notification.message} onClose={() => setNotification({ ...notification, isOpen: false })} />
 
             {paymentRequest && mpPublicKey && (
                 <PaymentModal 
@@ -542,7 +413,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                         <div className="mt-4 bg-white/10 p-4 rounded-lg flex justify-between items-center border border-white/10">
                             <div>
                                 <p className="text-xs uppercase font-semibold opacity-75">Ambiente</p>
-                                <p className="text-xl font-bold">{isSingleTenant ? 'Premium Exclusive' : 'Degustação Compartilhada'}</p>
+                                <p className="text-xl font-bold">{isSingleTenant ? 'Plano Ativo' : 'Trial (Degustação)'}</p>
                             </div>
                             <div className="text-right">
                                 {isSingleTenant ? (
@@ -577,26 +448,8 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                         </div>
                     )}
 
-                    {/* CORREÇÃO: Bloqueia cards normais se estiver provisionando */}
                     {!isFirstRun && !isDismissed && (
                         <>
-                        {isProvisioning ? (
-                             <div className="bg-white dark:bg-gray-800 p-8 rounded-xl shadow-sm border-2 border-yellow-400 text-center animate-fade-in">
-                                <div className="mx-auto w-16 h-16 bg-yellow-100 rounded-full flex items-center justify-center mb-4">
-                                    <svg className="h-8 w-8 text-yellow-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19.428 15.428a2 2 0 00-1.022-.547l-2.384-.477a6 6 0 00-3.86.517l-.318.158a6 6 0 01-3.86.517L6.05 15.21a2 2 0 00-1.806.547M8 4h8l-1 1v5.172a2 2 0 00.586 1.414l5 5c1.26 1.26.367 3.414-1.415 3.414H4.828c-1.782 0-2.674-2.154-1.414-3.414l5-5A2 2 0 009 10.172V5L8 4z" /></svg>
-                                </div>
-                                <h3 className="text-xl font-bold text-gray-900 dark:text-white mb-2">Preparando seu Ambiente</h3>
-                                <p className="text-gray-500 mb-6 text-sm">
-                                    O pagamento foi confirmado e nosso servidor está configurando sua instância dedicada.
-                                    <br/>
-                                    <strong>Você será notificado aqui</strong> assim que a migração estiver pronta.
-                                </p>
-                                <div className="inline-block bg-yellow-100 text-yellow-800 px-3 py-1 rounded-full text-xs font-bold animate-pulse">
-                                    Status: Provisionamento em andamento...
-                                </div>
-                             </div>
-                        ) : (
-                            <>
                              {/* GOOGLE MAPS CARD */}
                              {mapsCompleted ? (
                                 <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-4 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20`}>
@@ -724,19 +577,17 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
 
                                     <div className="bg-linear-to-br from-indigo-900 to-purple-800 p-5 rounded-xl text-white shadow-lg relative overflow-hidden">
                                          <div className="absolute top-0 right-0 bg-indigo-500 text-white text-[10px] font-black px-3 py-1 rounded-bl-lg tracking-widest">EXCLUSIVE</div>
-                                        <h4 className="font-bold text-lg mb-1">Migrar para Exclusive</h4>
-                                        <p className="text-indigo-100 text-sm mb-4">Infraestrutura dedicada e banco de dados isolado.</p>
+                                        <h4 className="font-bold text-lg mb-1">Upgrade para Plano Exclusive</h4>
+                                        <p className="text-indigo-100 text-sm mb-4">Aumente sua escalabilidade com o plano dedicado.</p>
                                         <button 
                                             onClick={() => setShowSingleTenantDetail(true)}
                                             className="w-full py-3 bg-white text-indigo-900 font-bold rounded-lg hover:bg-gray-100 shadow-md transition-colors"
                                         >
-                                            Ver Planos e Migrar
+                                            Ver Planos e Assinar
                                         </button>
                                     </div>
                                 </div>
                             )}
-                            </>
-                        )}
                         </>
                     )}
 
@@ -758,9 +609,9 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                                             <span className={`px-2 py-0.5 rounded text-xs font-bold ${
                                                 req.status === 'approved' || req.status === 'completed' ? 'bg-green-100 text-green-700' : 
                                                 req.status === 'waiting_payment' ? 'bg-yellow-100 text-yellow-700' : 
-                                                req.status === 'waiting_switch' ? 'bg-indigo-100 text-indigo-700' : 'bg-red-100 text-red-700'
+                                                'bg-red-100 text-red-700'
                                             }`}>
-                                                {req.status === 'waiting_payment' ? 'Processando' : req.status === 'waiting_switch' ? 'Pronto p/ Migrar' : req.status}
+                                                {req.status === 'waiting_payment' ? 'Processando' : req.status}
                                             </span>
                                         </div>
                                     </div>
