@@ -42,7 +42,7 @@ interface SubscriptionStatus {
     billingDayConfigured?: boolean;
 }
 
-// ... (NotificationModal, EcommerceLossWarningModal, PaymentModal components remain) ...
+// ... (NotificationModal, EcommerceLossWarningModal, PaymentModal components remain same) ...
 const NotificationModal: React.FC<{ isOpen: boolean; type: 'success' | 'error' | 'info'; message: string; onClose: () => void }> = ({ isOpen, type, message, onClose }) => {
     if (!isOpen) return null;
     let iconColor = 'text-gray-500';
@@ -118,10 +118,8 @@ const PaymentModal: React.FC<{ request: Request, publicKey: string, onClose: () 
     )
 }
 
-// ProvisioningInProgressModal e MigrationReadyModal REMOVIDOS.
-
 const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstRun = false, initialPaymentRequest = null, initialPublicKey = '' }) => {
-    const { token, apiCall, logout } = useContext(AuthContext); 
+    const { token, apiCall, logout, user } = useContext(AuthContext); 
     const [statusData, setStatusData] = useState<SubscriptionStatus | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     
@@ -156,9 +154,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
     
     const isProcessingRef = useRef(false);
 
-    // ... (Effects and API functions same as before, simplified status check) ...
-
-     // 1. Initial Data Load & Deep Link Handling
+     // 1. Initial Data Load
     useEffect(() => {
         if (initialPaymentRequest && initialPublicKey) {
             setMpPublicKey(initialPublicKey);
@@ -282,10 +278,21 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
             });
             const data = await response.json();
             if (response.ok) {
+                // Se for degustação ecommerce (grátis), pode não retornar chave pública
                 if (data.publicKey) setMpPublicKey(data.publicKey);
+                
                 if (data.request) {
-                    setPaymentRequest(data.request);
+                    if (data.request.status === 'approved') {
+                        // Ativação imediata (Ex: Degustação Ecom)
+                        handlePaymentSuccess(data.request);
+                    } else {
+                        setPaymentRequest(data.request);
+                    }
                 } 
+                
+                if (data.message && type === 'ecommerce') {
+                     setNotification({ isOpen: true, type: 'success', message: data.message });
+                }
             } else { 
                 setNotification({ isOpen: true, type: 'error', message: data.message }); 
             }
@@ -294,7 +301,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
         }
     };
 
-    // ... (Form submission handlers remain mostly same) ...
      const handleGoogleFormSubmit = (formData: any) => { setShowGoogleForm(false); handleRequest('google_maps', formData); };
     const handleEcommerceFormSubmit = (formData: any) => { setShowEcommerceForm(false); handleRequest('ecommerce', formData); };
     const handleBundleSubmit = (formData: any) => { setShowBundleMigration(false); handleRequest('upgrade', formData); }
@@ -363,8 +369,8 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                     <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-4">
                         <svg className="w-8 h-8 text-green-600 dark:text-green-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                     </div>
-                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Serviço Ativado!</h3>
-                    <p className="text-gray-500 dark:text-gray-300 mb-6">Sua solicitação foi processada. As novas funcionalidades já estão disponíveis.</p>
+                    <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Sucesso!</h3>
+                    <p className="text-gray-500 dark:text-gray-300 mb-6">Operação realizada.</p>
                     <button onClick={() => { setShowServiceSuccess(false); onClose(); window.location.reload(); }} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-colors">Continuar</button>
                 </div>
             </div>
@@ -375,18 +381,17 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
 
     // --- MAIN UI LAYOUT ---
     const isSingleTenant = statusData.plan === 'single_tenant';
+    const isBlockedOrExpired = statusData.status === 'blocked' || statusData.status === 'expired';
+    const isPaymentRequired = user?.paymentRequired; // Flag vinda do AuthContext/Login
+
     const trialDaysRemaining = Math.max(0, Math.ceil((new Date(statusData.trialEndsAt).getTime() - new Date().getTime()) / (1000 * 60 * 60 * 24)));
     const today = new Date();
     const lastPaid = statusData.lastPaymentDate ? new Date(statusData.lastPaymentDate) : null;
     const paidThisMonth = lastPaid && lastPaid.getMonth() === today.getMonth() && lastPaid.getFullYear() === today.getFullYear();
     const subEndsAt = statusData.subscriptionEndsAt ? new Date(statusData.subscriptionEndsAt) : null;
     const isCoverageActive = (subEndsAt && subEndsAt > today) || paidThisMonth;
-    const isLate = !isCoverageActive && (statusData.status === 'expired' || statusData.status === 'blocked');
+    const isLate = !isCoverageActive && isBlockedOrExpired;
 
-    const isSecondExtensionAllowed = statusData.extensionCount === 1 && trialDaysRemaining <= 5;
-    const isExtensionAllowed = statusData.extensionCount === 0 || isSecondExtensionAllowed;
-
-    const mapsApproved = statusData.requests.find(r => r.type === 'google_maps' && r.status === 'approved');
     const mapsCompleted = statusData.requests.find(r => r.type === 'google_maps' && r.status === 'completed') || googleStatus === 'verified';
     const ecommerceRequest = statusData.requests.find(r => r.type === 'ecommerce' && (r.status === 'completed' || r.status === 'approved'));
 
@@ -404,31 +409,26 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
 
             <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-2xl overflow-hidden flex flex-col max-h-[90vh]">
                 {/* Header */}
-                <div className={`p-6 text-white ${isSingleTenant ? 'bg-linear-to-r from-emerald-700 to-emerald-500' : 'bg-linear-to-r from-indigo-700 to-indigo-500'}`}>
+                <div className={`p-6 text-white ${isBlockedOrExpired ? 'bg-red-600' : (isSingleTenant ? 'bg-linear-to-r from-emerald-700 to-emerald-500' : 'bg-linear-to-r from-indigo-700 to-indigo-500')}`}>
                     <div className="flex justify-between items-center">
-                        <h2 className="text-2xl font-bold">{isFirstRun ? 'Bem-vindo ao Plano Exclusive!' : 'Status do Sistema'}</h2>
-                        {!isFirstRun && <button onClick={onClose} className="hover:bg-white/20 rounded-full p-1 transition-colors">✕</button>}
+                        <h2 className="text-2xl font-bold">{isPaymentRequired ? 'Acesso Bloqueado' : 'Status do Sistema'}</h2>
+                        {!isFirstRun && !isPaymentRequired && <button onClick={onClose} className="hover:bg-white/20 rounded-full p-1 transition-colors">✕</button>}
                     </div>
-                    {!isFirstRun && (
-                        <div className="mt-4 bg-white/10 p-4 rounded-lg flex justify-between items-center border border-white/10">
-                            <div>
-                                <p className="text-xs uppercase font-semibold opacity-75">Ambiente</p>
-                                <p className="text-xl font-bold">{isSingleTenant ? 'Plano Ativo' : 'Trial (Degustação)'}</p>
-                            </div>
-                            <div className="text-right">
-                                {isSingleTenant ? (
-                                    <>
-                                        <p className="text-xs opacity-75">Mensalidade</p>
-                                        <p className={`text-xl font-bold ${isCoverageActive ? 'text-green-300' : (isLate ? 'text-red-300' : 'text-white')}`}>
-                                            {isCoverageActive ? 'Em dia' : (isLate ? 'Em Atraso' : 'A Vencer')}
-                                        </p>
-                                    </>
-                                ) : (
-                                    <p className="text-3xl font-bold">{trialDaysRemaining}d <span className="text-sm font-normal">restantes</span></p>
-                                )}
-                            </div>
+                    
+                    <div className="mt-4 bg-white/10 p-4 rounded-lg flex justify-between items-center border border-white/10">
+                        <div>
+                            <p className="text-xs uppercase font-semibold opacity-75">Status</p>
+                            <p className="text-xl font-bold">
+                                {isPaymentRequired ? 'Pagamento Pendente' : (isSingleTenant ? 'Plano Ativo' : 'Trial (Degustação)')}
+                            </p>
                         </div>
-                    )}
+                        <div className="text-right">
+                             <p className="text-xs opacity-75">Vencimento</p>
+                             <p className="text-xl font-bold">
+                                {isBlockedOrExpired ? 'Expirado' : (isSingleTenant ? `Dia ${statusData.monthlyPaymentDay}` : `${trialDaysRemaining} dias`)}
+                             </p>
+                        </div>
+                    </div>
                 </div>
 
                 <div className="p-6 bg-gray-50 dark:bg-gray-900 space-y-6 overflow-y-auto">
@@ -450,173 +450,136 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
 
                     {!isFirstRun && !isDismissed && (
                         <>
-                             {/* GOOGLE MAPS CARD */}
-                             {mapsCompleted ? (
-                                <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-4 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20`}>
-                                    <div>
-                                        <h4 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                                            <span>📍</span> Presença no Google Confirmada
-                                        </h4>
-                                        <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                            Sua empresa está visivel no google.
-                                        </p>
-                                    </div>
+                             {/* Bloqueio de Pagamento */}
+                             {isPaymentRequired && (
+                                <div className="bg-red-50 dark:bg-red-900/20 p-5 rounded-xl border border-red-200 dark:border-red-700 text-center">
+                                    <h3 className="text-xl font-bold text-red-700 dark:text-red-400 mb-2">Renovação Necessária</h3>
+                                    <p className="text-gray-600 dark:text-gray-300 mb-6">
+                                        Seu período de acesso expirou. Para continuar utilizando o sistema e manter sua loja online no ar, efetue o pagamento da mensalidade.
+                                    </p>
                                     <button 
-                                        onClick={() => { if(storeGoals?.googleBusiness?.mapsUri) window.open(storeGoals.googleBusiness.mapsUri, '_blank'); }} 
-                                        className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm"
+                                        onClick={() => handleRequest('monthly')} 
+                                        className="w-full py-4 bg-red-600 hover:bg-red-700 text-white font-bold rounded-xl shadow-lg transition-transform hover:scale-105 animate-pulse"
                                     >
-                                        Ver Perfil
+                                        Pagar Mensalidade Agora
                                     </button>
                                 </div>
-                             ) : mapsApproved ? (
-                                <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-4 bg-blue-50 border-blue-200 dark:bg-blue-900/20`}>
-                                    <div>
-                                        <h4 className="font-bold text-blue-800 dark:text-blue-300 flex items-center gap-2">
-                                            <span>⏳</span> Presença no Google em andamento...
-                                        </h4>
-                                        <p className="text-sm text-blue-700 dark:text-blue-400 mt-1">
-                                            Estamos realizando o cadastramento da sua empresa no Google. Você será avisado. Aguarde.
-                                        </p>
-                                    </div>
-                                </div>
-                             ) : (googleStatus === 'unverified' || googleStatus === 'not_found') ? (
-                                <div className="bg-yellow-50 dark:bg-yellow-900/20 p-4 rounded-xl border border-yellow-200 dark:border-yellow-700 flex flex-col sm:flex-row justify-between items-center gap-4">
-                                    <div>
-                                        <h4 className="font-bold text-yellow-800 dark:text-yellow-300 flex items-center gap-2">
-                                            <span className="text-xl">⚠️</span> Presença no Google Maps
-                                        </h4>
-                                        <p className="text-sm text-yellow-700 dark:text-yellow-400 mt-1">Sua empresa precisa ser verificada para aparecer nas buscas.</p>
-                                    </div>
-                                    <button onClick={() => setShowGoogleVerification(true)} className="px-5 py-2 bg-yellow-600 hover:bg-yellow-700 text-white font-bold rounded-lg shadow-md whitespace-nowrap">Verificar Agora</button>
-                                </div>
-                             ) : null}
-
-                             {/* ECOMMERCE CARD */}
-                             {(googleStatus === 'verified' || mapsCompleted) && (
-                                ecommerceRequest ? (
-                                    <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-4 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20`}>
-                                        <div>
-                                            <h4 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
-                                                <span>🛍️</span> {statusData.plan === 'trial' ? 'Loja Virtual (Degustação)' : 'Loja Virtual Ativa'}
-                                            </h4>
-                                            <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                                                Sua loja está online.
-                                            </p>
-                                        </div>
-                                        <button 
-                                            onClick={handleOpenStore}
-                                            className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm"
-                                        >
-                                            Acessar Loja
-                                        </button>
-                                    </div>
-                                ) : (
-                                    <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-200 dark:border-indigo-700 flex flex-col sm:flex-row justify-between items-center gap-4">
-                                        <div>
-                                            <h4 className="font-bold text-indigo-800 dark:text-indigo-300 flex items-center gap-2"><span>🛒</span> Venda Online 24h</h4>
-                                            <p className="text-sm text-indigo-700 dark:text-indigo-400 mt-1">Transforme seu estoque em uma vitrine virtual automática.</p>
-                                        </div>
-                                        <button onClick={() => setShowEcommerceDetail(true)} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md whitespace-nowrap">Conhecer Loja Virtual</button>
-                                    </div>
-                                )
                              )}
 
-                            {/* Single Tenant / Mensalidade Cards */}
-                            {isSingleTenant ? (
-                                 <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4">
-                                    <div>
-                                        <h3 className="font-bold text-lg text-gray-900 dark:text-white">Mensalidade Exclusive</h3>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400">Próximo Vencimento: Dia {statusData.monthlyPaymentDay}</p>
-                                    </div>
-                                    {isCoverageActive ? (
-                                        <span className="px-6 py-3 bg-green-100 text-green-700 font-bold rounded-xl border border-green-200 flex items-center gap-2">
-                                            ✓ Plano Ativo
-                                        </span>
-                                    ) : (
-                                        <button onClick={() => handleRequest('monthly')} className={`px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-transform hover:scale-105 ${isLate ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
-                                            {isLate ? 'Pagar Agora (Atrasado)' : 'Pagar Mensalidade'}
-                                        </button>
-                                    )}
-                                </div>
-                            ) : (
-                                // Trial Options
-                                <div className="grid grid-cols-1 gap-4">
-                                    <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-300 transition-colors shadow-sm">
-                                        <div className="flex justify-between items-start mb-2">
-                                            <h4 className="font-bold text-indigo-900 dark:text-white">Manutenção do Trial</h4>
-                                            <span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded-full font-bold">{2 - statusData.extensionCount} restantes</span>
-                                        </div>
-                                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-                                            {statusData.extensionCount === 1 
-                                                ? "Segunda extensão disponível apenas nos últimos 5 dias." 
-                                                : "Precisa de mais tempo? Adicione 30 dias por R$ 97,00."}
-                                        </p>
-                                        
-                                        {isExtensionAllowed && statusData.extensionCount < 2 ? (
+                             {/* Cards Normais (Só exibe se não estiver bloqueado ou se for Owner gerindo) */}
+                             {!isPaymentRequired && (
+                                <>
+                                 {/* ECOMMERCE CARD */}
+                                 {(googleStatus === 'verified' || mapsCompleted) && (
+                                    ecommerceRequest ? (
+                                        <div className={`p-4 rounded-xl border flex flex-col sm:flex-row justify-between items-center gap-4 bg-emerald-50 border-emerald-200 dark:bg-emerald-900/20`}>
+                                            <div>
+                                                <h4 className="font-bold text-gray-800 dark:text-white flex items-center gap-2">
+                                                    <span>🛍️</span> {statusData.plan === 'trial' ? 'Loja Virtual (Degustação)' : 'Loja Virtual Ativa'}
+                                                </h4>
+                                                <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
+                                                    Sua loja está online.
+                                                </p>
+                                            </div>
                                             <button 
-                                                onClick={() => handleRequest('extension')} 
-                                                className="w-full py-2 border-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20"
+                                                onClick={handleOpenStore}
+                                                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm"
                                             >
-                                                Solicitar Extensão
+                                                Acessar Loja
                                             </button>
+                                        </div>
+                                    ) : (
+                                        <div className="bg-indigo-50 dark:bg-indigo-900/20 p-4 rounded-xl border border-indigo-200 dark:border-indigo-700 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                            <div>
+                                                <h4 className="font-bold text-indigo-800 dark:text-indigo-300 flex items-center gap-2"><span>🛒</span> Venda Online 24h</h4>
+                                                <p className="text-sm text-indigo-700 dark:text-indigo-400 mt-1">Transforme seu estoque em uma vitrine virtual automática.</p>
+                                            </div>
+                                            <button onClick={() => setShowEcommerceDetail(true)} className="px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md whitespace-nowrap">Conhecer Loja Virtual</button>
+                                        </div>
+                                    )
+                                 )}
+
+                                {/* Plano / Mensalidade Cards */}
+                                {isSingleTenant ? (
+                                     <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700 flex flex-col sm:flex-row justify-between items-center gap-4">
+                                        <div>
+                                            <h3 className="font-bold text-lg text-gray-900 dark:text-white">Mensalidade</h3>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400">Próximo Vencimento: Dia {statusData.monthlyPaymentDay}</p>
+                                        </div>
+                                        {isCoverageActive ? (
+                                            <span className="px-6 py-3 bg-green-100 text-green-700 font-bold rounded-xl border border-green-200 flex items-center gap-2">
+                                                ✓ Em dia
+                                            </span>
                                         ) : (
-                                            <button 
-                                                onClick={() => setNotification({ 
-                                                    isOpen: true, 
-                                                    type: 'info', 
-                                                    message: statusData.extensionCount >= 2 
-                                                        ? 'Você já utilizou todas as extensões permitidas.' 
-                                                        : 'A segunda extensão só pode ser solicitada nos últimos 5 dias do período atual.' 
-                                                })}
-                                                className="w-full py-2 bg-gray-100 dark:bg-gray-700 text-gray-400 font-bold rounded-lg cursor-help border border-transparent"
-                                            >
-                                                {statusData.extensionCount >= 2 ? 'Limite Atingido' : 'Aguarde os 5 dias finais'}
+                                            <button onClick={() => handleRequest('monthly')} className={`px-8 py-3 rounded-xl font-bold text-white shadow-lg transition-transform hover:scale-105 ${isLate ? 'bg-red-600 hover:bg-red-700 animate-pulse' : 'bg-indigo-600 hover:bg-indigo-700'}`}>
+                                                {isLate ? 'Pagar Agora' : 'Pagar Mensalidade'}
                                             </button>
                                         )}
                                     </div>
+                                ) : (
+                                    // Trial Options
+                                    <div className="grid grid-cols-1 gap-4">
+                                        <div className="bg-white dark:bg-gray-800 p-5 rounded-xl border border-gray-200 dark:border-gray-700 hover:border-indigo-300 transition-colors shadow-sm">
+                                            <div className="flex justify-between items-start mb-2">
+                                                <h4 className="font-bold text-indigo-900 dark:text-white">Extensão de Degustação</h4>
+                                                <span className="bg-indigo-100 text-indigo-700 text-xs px-2 py-1 rounded-full font-bold">{2 - statusData.extensionCount} restantes</span>
+                                            </div>
+                                            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+                                                Precisa de mais tempo? Adicione 30 dias por R$ 97,00.
+                                            </p>
+                                            <button 
+                                                onClick={() => handleRequest('extension')} 
+                                                disabled={statusData.extensionCount >= 2}
+                                                className="w-full py-2 border-2 border-indigo-600 text-indigo-600 dark:text-indigo-400 font-bold rounded-lg hover:bg-indigo-50 dark:hover:bg-indigo-900/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                                            >
+                                                Solicitar Extensão
+                                            </button>
+                                        </div>
 
-                                    <div className="bg-linear-to-br from-indigo-900 to-purple-800 p-5 rounded-xl text-white shadow-lg relative overflow-hidden">
-                                         <div className="absolute top-0 right-0 bg-indigo-500 text-white text-[10px] font-black px-3 py-1 rounded-bl-lg tracking-widest">EXCLUSIVE</div>
-                                        <h4 className="font-bold text-lg mb-1">Upgrade para Plano Exclusive</h4>
-                                        <p className="text-indigo-100 text-sm mb-4">Aumente sua escalabilidade com o plano dedicado.</p>
-                                        <button 
-                                            onClick={() => setShowSingleTenantDetail(true)}
-                                            className="w-full py-3 bg-white text-indigo-900 font-bold rounded-lg hover:bg-gray-100 shadow-md transition-colors"
-                                        >
-                                            Ver Planos e Assinar
-                                        </button>
+                                        <div className="bg-linear-to-br from-indigo-900 to-purple-800 p-5 rounded-xl text-white shadow-lg relative overflow-hidden">
+                                            <h4 className="font-bold text-lg mb-1">Assinar Plano Oficial</h4>
+                                            <p className="text-indigo-100 text-sm mb-4">Garanta seu acesso contínuo e recursos avançados.</p>
+                                            <button 
+                                                onClick={() => setShowSingleTenantDetail(true)}
+                                                className="w-full py-3 bg-white text-indigo-900 font-bold rounded-lg hover:bg-gray-100 shadow-md transition-colors"
+                                            >
+                                                Ver Planos
+                                            </button>
+                                        </div>
                                     </div>
-                                </div>
-                            )}
+                                )}
+                                </>
+                             )}
                         </>
                     )}
 
                      {/* Histórico de Solicitações */}
                     {!isFirstRun && (
                         <div className="mt-8">
-                            <h4 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Histórico Recente</h4>
+                            <h4 className="text-sm font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider mb-3">Histórico Financeiro</h4>
                             <div className="space-y-3">
                                 {statusData.requests
-                                    .filter(r => r.status !== 'pending') 
-                                    .slice().reverse().slice(0, 3)
+                                    .filter(r => r.status !== 'pending' && r.type !== 'google_maps') 
+                                    .slice().reverse().slice(0, 5)
                                     .map((req, idx) => (
                                     <div key={idx} className="flex justify-between items-center p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-100 dark:border-gray-700">
                                         <div>
-                                            <p className="font-bold text-sm text-gray-800 dark:text-gray-200 capitalize">{req.type.replace('_', ' ')}</p>
+                                            <p className="font-bold text-sm text-gray-800 dark:text-gray-200 capitalize">{req.type === 'extension' ? 'Extensão Trial' : req.type === 'upgrade' ? 'Assinatura' : req.type === 'monthly' ? 'Mensalidade' : req.type}</p>
                                             <p className="text-xs text-gray-500">{new Date(req.requestedAt).toLocaleDateString()}</p>
                                         </div>
                                         <div className="flex flex-col items-end gap-1">
-                                            <span className={`px-2 py-0.5 rounded text-xs font-bold ${
+                                            <span className="font-bold text-sm text-gray-900 dark:text-white">R$ {formatCurrencyNumber(req.amount)}</span>
+                                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
                                                 req.status === 'approved' || req.status === 'completed' ? 'bg-green-100 text-green-700' : 
                                                 req.status === 'waiting_payment' ? 'bg-yellow-100 text-yellow-700' : 
                                                 'bg-red-100 text-red-700'
                                             }`}>
-                                                {req.status === 'waiting_payment' ? 'Processando' : req.status}
+                                                {req.status === 'waiting_payment' ? 'Aguardando' : req.status === 'approved' ? 'Pago' : req.status}
                                             </span>
                                         </div>
                                     </div>
                                 ))}
-                                {statusData.requests.filter(r => r.status !== 'pending').length === 0 && <p className="text-center text-sm text-gray-400 italic">Nenhuma solicitação concluída.</p>}
+                                {statusData.requests.filter(r => r.status !== 'pending').length === 0 && <p className="text-center text-sm text-gray-400 italic">Nenhum pagamento registrado.</p>}
                             </div>
                         </div>
                     )}
