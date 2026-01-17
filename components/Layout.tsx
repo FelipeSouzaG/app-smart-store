@@ -1,4 +1,5 @@
-import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
+
+import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
 import { SAAS_API_URL } from '../config';
 import Sidebar from './Sidebar';
@@ -120,7 +121,7 @@ const STATIC_ACCOUNTS: FinancialAccount[] = [
 ];
 
 const Layout: React.FC = () => {
-    const { user, token, apiCall, updateUser: updateUserInContext, logout } = useContext(AuthContext);
+    const { user, token, apiCall, updateUser: updateUserInContext, logout } = React.useContext(AuthContext);
     const [isRedirecting, setIsRedirecting] = useState(false);
     const [isBootstrapComplete, setIsBootstrapComplete] = useState(false);
     const [activePage, setActivePage] = useState(user?.role === 'technician' ? 'sales' : 'dashboard');
