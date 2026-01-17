@@ -1,13 +1,125 @@
+import React, { useState, useEffect, useContext, useMemo, useRef } from 'react';
+import { AuthContext } from '../contexts/AuthContext';
+import { SAAS_API_URL } from '../config';
+import Sidebar from './Sidebar';
+import Dashboard from './Dashboard';
+import Sales from './Sales';
+import SalesHistory from './SalesHistory';
+import EcommerceOrders from './EcommerceOrders';
+import Cash from './Cash';
+import Purchases from './Purchases';
+import Costs from './Costs';
+import ServiceOrders from './ServiceOrders';
+import Products from './Products';
+import Services from './Services';
+import Customers from './Customers';
+import Suppliers from './Suppliers';
+import Users from './Users';
+import Profile from './Profile';
+import SystemStatusModal from './SystemStatusModal';
+import WelcomeModal from './WelcomeModal';
+import GoalsModal from './GoalsModal';
+import GoogleVerificationModal from './GoogleVerificationModal';
+import GoogleBusinessFormModal from './GoogleBusinessFormModal';
+import GoogleSuccessModal from './GoogleSuccessModal';
+import EcommerceDetailModal from './EcommerceDetailModal';
+import EcommerceFormModal from './EcommerceFormModal';
+import SingleTenantDetailModal from './SingleTenantDetailModal';
+import BundleMigrationModal from './BundleMigrationModal';
+import GoogleVerificationAlertModal, { GrowthVariant } from './GoogleVerificationAlertModal';
+import BroadcastModal from './BroadcastModal';
 
-// ... (imports permanecem iguais)
 import { 
     CashTransaction, Service, Product, PurchaseOrder, ServiceOrder, TicketSale, User, Customer, Supplier, KpiGoals, TurnoverPeriod, FinancialAccount, TransactionStatus
 } from '../types';
 
-// ... (Sub-componentes visuais como PaymentSuccessModal, NotificationModal, etc. permanecem iguais)
+// Placeholder/Inline Definitions for missing components in context if they are simple
+const PaymentSuccessModal: React.FC<{ type: string, onClose: () => void, tenantName?: string }> = ({ type, onClose }) => (
+    <div className="fixed inset-0 bg-black bg-opacity-80 flex items-center justify-center z-130 p-4">
+        <div className="bg-white dark:bg-gray-800 p-8 rounded-2xl shadow-2xl text-center border border-gray-200 dark:border-gray-700">
+            <h3 className="text-2xl font-bold text-green-600 dark:text-green-400 mb-2">Pagamento Confirmado!</h3>
+            <p className="text-gray-500 dark:text-gray-300 mb-6">Referência: {type}</p>
+            <button onClick={onClose} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-colors">Continuar</button>
+        </div>
+    </div>
+);
+
+const NotificationModal: React.FC<{ isOpen: boolean; type: 'success' | 'error' | 'info'; message: string; onClose: () => void }> = ({ isOpen, type, message, onClose }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-200 flex items-center justify-center bg-black bg-opacity-60 backdrop-blur-sm p-4 animate-fade-in">
+            <div className="bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl shadow-2xl p-6 max-w-sm w-full transform transition-all scale-100">
+                <h3 className="text-lg leading-6 font-bold text-center mb-2 text-gray-900 dark:text-white">{type === 'success' ? 'Sucesso!' : type === 'error' ? 'Atenção' : 'Informação'}</h3>
+                <p className="text-sm text-gray-500 dark:text-gray-300 text-center mb-6">{message}</p>
+                <button onClick={onClose} className="w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2 text-base font-medium text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none transition-colors">Entendi</button>
+            </div>
+        </div>
+    );
+};
+
+const ExpirationAlertModal: React.FC<{ isOpen: boolean; variant: 'trial' | 'monthly'; daysLeft: number; onAction: () => void; onRemindLater: () => void }> = ({ isOpen, variant, daysLeft, onAction, onRemindLater }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-140 flex items-center justify-center bg-black bg-opacity-70 backdrop-blur-sm p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-sm w-full text-center">
+                <h3 className="text-xl font-bold text-red-600 mb-2">Atenção: Vencimento Próximo</h3>
+                <p className="text-gray-600 dark:text-gray-300 mb-4">Seu plano {variant === 'trial' ? 'de degustação' : 'mensal'} expira em <strong>{daysLeft} dias</strong>.</p>
+                <button onClick={onAction} className="w-full py-2 bg-indigo-600 text-white rounded-lg font-bold mb-2">Renovar Agora</button>
+                <button onClick={onRemindLater} className="text-sm text-gray-500 hover:underline">Lembrar depois</button>
+            </div>
+        </div>
+    );
+};
+
+const LowMarginAlertModal: React.FC<{ isOpen: boolean; onReview: () => void; onIgnore: () => void }> = ({ isOpen, onReview, onIgnore }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-140 flex items-center justify-center bg-black bg-opacity-70 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-sm w-full text-center">
+                <h3 className="text-lg font-bold text-yellow-600 mb-2">Margem de Lucro Baixa</h3>
+                <p className="text-gray-600 dark:text-gray-300 mb-4 text-sm">Alguns produtos estão com margem abaixo do ideal configurado.</p>
+                <button onClick={onReview} className="w-full py-2 bg-yellow-500 text-white rounded-lg font-bold mb-2">Revisar Produtos</button>
+                <button onClick={onIgnore} className="text-sm text-gray-500 hover:underline">Ignorar por enquanto</button>
+            </div>
+        </div>
+    );
+};
+
+const EcommerceLossWarningModal: React.FC<{ isOpen: boolean; onConfirmBasic: () => void; onSwitchToBundle: () => void; onClose: () => void }> = ({ isOpen, onConfirmBasic, onSwitchToBundle, onClose }) => {
+    if (!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-150 flex items-center justify-center bg-black bg-opacity-80 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl p-6 max-w-md w-full text-center">
+                <h3 className="text-xl font-bold text-red-600 mb-4">Perda de Loja Virtual</h3>
+                <p className="text-gray-600 dark:text-gray-300 mb-6 text-sm">Ao mudar para o plano Básico, sua loja virtual será desativada. Recomendamos o plano Bundle.</p>
+                <button onClick={onSwitchToBundle} className="w-full py-2 bg-indigo-600 text-white rounded-lg font-bold mb-2">Ver Plano Bundle</button>
+                <button onClick={onConfirmBasic} className="w-full py-2 bg-gray-200 dark:bg-gray-700 text-gray-800 dark:text-white rounded-lg font-bold mb-2">Continuar Básico</button>
+                <button onClick={onClose} className="text-sm text-gray-500 hover:underline">Cancelar</button>
+            </div>
+        </div>
+    );
+};
+
+const SystemStatusFeedbackModal: React.FC<{ isOpen: boolean; onClose: () => void }> = ({ isOpen, onClose }) => {
+    if(!isOpen) return null;
+    return (
+        <div className="fixed inset-0 z-150 flex items-center justify-center bg-black bg-opacity-60 p-4">
+            <div className="bg-white dark:bg-gray-800 rounded-xl p-6 text-center">
+                <p className="text-gray-800 dark:text-white mb-4">Obrigado pelo feedback!</p>
+                <button onClick={onClose} className="px-4 py-2 bg-indigo-600 text-white rounded-lg">Fechar</button>
+            </div>
+        </div>
+    );
+};
+
+const STATIC_ACCOUNTS: FinancialAccount[] = [
+    { id: 'cash-box', bankName: 'Dinheiro em Caixa', balance: 0, paymentMethods: [], receivingRules: [] },
+    { id: 'bank-main', bankName: 'Conta Bancária', balance: 0, paymentMethods: [{id: 'pix', name: 'Pix', type: 'Pix'}, {id: 'debit', name: 'Débito', type: 'Debit'}], receivingRules: [] },
+    { id: 'credit-main', bankName: 'Cartão de Crédito', balance: 0, paymentMethods: [], receivingRules: [] },
+    { id: 'boleto', bankName: 'Boletos a Pagar', balance: 0, paymentMethods: [], receivingRules: [] }
+];
 
 const Layout: React.FC = () => {
-    // ... (Hooks, State Data - Same as before)
     const { user, token, apiCall, updateUser: updateUserInContext, logout } = useContext(AuthContext);
     const [isRedirecting, setIsRedirecting] = useState(false);
     const [isBootstrapComplete, setIsBootstrapComplete] = useState(false);
@@ -34,9 +146,6 @@ const Layout: React.FC = () => {
         googleBusiness: { status: 'unverified', hasExternalEcommerce: false }
     });
     
-    // New State for Policy Enforcement Flow
-    const [showEcommercePolicies, setShowEcommercePolicies] = useState(false);
-
     // Broadcast State
     const [broadcasts, setBroadcasts] = useState<any[]>([]);
 
@@ -71,8 +180,25 @@ const Layout: React.FC = () => {
     const [immediatePaymentRequest, setImmediatePaymentRequest] = useState<any>(null); 
     const [immediatePublicKey, setImmediatePublicKey] = useState<string>(''); 
     const [paymentSuccessType, setPaymentSuccessType] = useState<string | null>(null);
+    const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
 
-    // ... (Helper functions remain the same) ...
+    const checkCriticalDataMissing = (settings: KpiGoals) => {
+         return !settings.companyInfo?.name || !settings.companyInfo?.address?.cep;
+    };
+
+    const fetchData = async (endpoint: string, setter: React.Dispatch<React.SetStateAction<any>>) => {
+        const data = await apiCall(endpoint, 'GET');
+        if (data) setter(data);
+    };
+
+    const fetchBroadcasts = async () => {
+        const data = await apiCall('system/broadcasts', 'GET');
+        if (data) setBroadcasts(data);
+    };
+
+    const handleReadBroadcast = (id: string) => {
+         setBroadcasts(prev => prev.filter(b => b._id !== id));
+    };
 
     // --- BOOTSTRAP LOGIC ---
     useEffect(() => {
@@ -89,6 +215,20 @@ const Layout: React.FC = () => {
 
                 if (isPaymentReturn && !paymentSuccessType) {
                     setPaymentSuccessType(paymentRef);
+                }
+
+                // --- 1. BLOQUEIO DE OWNER (PAGAMENTO PENDENTE) ---
+                if (user.paymentRequired) {
+                    setIsSystemBlocked(true);
+                    const billingResponse = await fetch(`${SAAS_API_URL}/subscription/status`, {
+                        headers: { 'Authorization': `Bearer ${token}` }
+                    });
+                    if (billingResponse.ok) {
+                         const billingData = await billingResponse.json();
+                         setBillingStatusData(billingData);
+                    }
+                    setIsBootstrapComplete(true);
+                    return; 
                 }
 
                 const billingResponse = await fetch(`${SAAS_API_URL}/subscription/status`, {
@@ -111,8 +251,6 @@ const Layout: React.FC = () => {
                 let expDaysLeft = 0;
                 let expVariant: 'trial' | 'monthly' = 'trial';
 
-                // REMOVIDO: Lógica de redirecionamento Single Tenant
-                
                 // PRIORITY 2: BLOCKED / EXPIRED
                 if (determinedAction === 'none' && (billingData.status === 'blocked' || billingData.status === 'expired')) {
                     determinedAction = 'block';
@@ -212,8 +350,6 @@ const Layout: React.FC = () => {
                     setGrowthAlertVariant(growthVariant);
                 }
 
-                // ... (Data fetching Logic remains same) ...
-                
                 const productsData = await apiCall('products', 'GET');
                 if (productsData) setProducts(productsData);
 
@@ -243,13 +379,136 @@ const Layout: React.FC = () => {
         };
 
         bootstrapSystem();
-    }, [token, user, fetchData, apiCall]);
+    }, [token, user, apiCall]);
 
-    // ... (Rest of Payment Logic, Event Handlers remain same, minus Migration Warning modal state which is removed) ...
+    // --- Action Handlers ---
+    const handleCloseStatusModal = () => { setShowStatusModal(false); };
+    const handleWelcomeClose = () => { setShowWelcomeModal(false); setShowSetupWizard(true); };
+    const handleSaveGoals = async (newGoals: KpiGoals) => {
+        const updated = await apiCall('settings', 'PUT', newGoals);
+        if (updated) { 
+            setGoals(updated); 
+            setIsFirstRunST(false);
+            
+            // Re-check for low margins after update
+            if (activePage === 'products') {
+                // If we are on products page, logic inside Products component handles visualization
+                // But global alert logic can be here
+                // ...
+            }
+        }
+    };
+    
+    // Payment Success Handlers
+    const handleSuccessModalClose = async () => {
+        setShowGoogleSuccess(false);
+        await apiCall('settings/google-business', 'PUT', { successShown: true });
+    };
+
+    const handleGrowthAction = () => {
+        setGrowthAlertVariant(null);
+        if (growthAlertVariant === 'verify' || growthAlertVariant === 'maps_offer') setShowGoogleVerification(true);
+        if (growthAlertVariant === 'ecommerce_offer') setShowEcommerceDetail(true);
+        if (growthAlertVariant === 'single_tenant_offer') setShowSingleTenantDetail(true);
+    };
+
+    const handleVerificationComplete = () => {
+        // Refresh settings to check status
+        apiCall('settings', 'GET').then(data => { if(data) setGoals(prev => ({...prev, ...data})); });
+    };
+
+    const handleServiceRequestFromVerification = (type: 'google_maps' | 'ecommerce') => {
+        // Logic handled inside SystemStatusModal for actual request, here we just trigger UI
+        setShowStatusModal(true);
+        // Note: Ideally pass a prop to SystemStatusModal to auto-open specific form
+    };
+
+    const handleGoogleFormSubmit = (formData: any) => { setShowGoogleForm(false); setShowStatusModal(true); }; // In reality, SystemStatusModal handles submission
+    const handleEcommerceFormSubmit = (formData: any) => { setShowEcommerceForm(false); setShowStatusModal(true); };
+    const handleBundleMigrationSubmit = (formData: any) => { setShowBundleMigrationModal(false); setShowStatusModal(true); };
+
+    const handleConfirmBasicUpgrade = () => { setShowEcomLossWarning(false); setShowStatusModal(true); };
+    const handleUpgradeBundleClick = () => { setShowEcomLossWarning(false); setShowBundleMigrationModal(true); };
+    const handleUpgradeBasicClick = () => { setShowSingleTenantDetail(false); setShowEcomLossWarning(true); }; // Check first
+
+    const handleReviewLowMargins = () => {
+        setShowLowMarginAlert(false);
+        setPassLowMarginFilter(true); // Pass this to Products component
+        setActivePage('products');
+    };
+    
+    const handleIgnoreLowMargins = () => {
+        setShowLowMarginAlert(false);
+        sessionStorage.setItem('lowMarginIgnored', 'true');
+    };
+
+    // --- RENDER CONTENT ---
+    const renderContent = () => {
+        switch (activePage) {
+            case 'dashboard': return <Dashboard transactions={transactions} ticketSales={ticketSales} products={products} goals={goals} onSaveGoals={handleSaveGoals} />;
+            case 'sales': return <Sales products={products} onAddSale={async (s) => { const res = await apiCall('sales', 'POST', s); if (res) { setTicketSales(prev => [res, ...prev]); return res; } return null; }} goals={goals} />;
+            case 'sales-history': return <SalesHistory sales={ticketSales} goals={goals} />;
+            case 'ecommerce': return <EcommerceOrders goals={goals} products={products} onOrderUpdate={() => fetchData('ecommerce-orders', () => {})} />;
+            case 'cash': return <Cash 
+                transactions={transactions} 
+                creditTransactions={creditTransactions}
+                accounts={accounts} 
+                updateTransactionStatus={async (id, status) => { await apiCall(`transactions/${id}`, 'PUT', { status }); fetchData('transactions', setTransactions); }} 
+                updateTransaction={async (t) => { await apiCall(`transactions/${t.id}`, 'PUT', t); fetchData('transactions', setTransactions); }}
+                onSaveAccount={async (a) => {}} // Placeholder
+                onDeleteAccount={async (id) => {}} // Placeholder
+                onRefreshData={async () => { 
+                    fetchData('transactions', setTransactions); 
+                    fetchData('transactions/credit-card', setCreditTransactions); 
+                }}
+            />;
+            case 'purchases': return <Purchases products={products} purchaseOrders={purchaseOrders} onAddPurchase={async (p) => { await apiCall('purchases', 'POST', p); fetchData('purchases', setPurchaseOrders); fetchData('transactions', setTransactions); }} onUpdatePurchase={async (p) => { await apiCall(`purchases/${p.id}`, 'PUT', p); fetchData('purchases', setPurchaseOrders); fetchData('transactions', setTransactions); }} onDeletePurchase={async (id) => { await apiCall(`purchases/${id}`, 'DELETE'); fetchData('purchases', setPurchaseOrders); fetchData('transactions', setTransactions); }} goals={goals} />;
+            case 'costs': return <Costs 
+                transactions={transactions} 
+                addTransaction={async (t) => { await apiCall('transactions', 'POST', t); fetchData('transactions', setTransactions); fetchData('transactions/credit-card', setCreditTransactions); }} 
+                updateTransaction={async (t) => { await apiCall(`transactions/${t.id}`, 'PUT', t); fetchData('transactions', setTransactions); fetchData('transactions/credit-card', setCreditTransactions); }} 
+                deleteTransaction={async (id) => { await apiCall(`transactions/${id}`, 'DELETE'); fetchData('transactions', setTransactions); fetchData('transactions/credit-card', setCreditTransactions); }} 
+            />;
+            case 'service-orders': return <ServiceOrders 
+                services={services} 
+                serviceOrders={serviceOrders} 
+                onAddServiceOrder={async (o) => { await apiCall('service-orders', 'POST', o); fetchData('service-orders', setServiceOrders); fetchData('customers', setCustomers); }} 
+                onUpdateServiceOrder={async (o) => { await apiCall(`service-orders/${o.id}`, 'PUT', o); fetchData('service-orders', setServiceOrders); fetchData('customers', setCustomers); }} 
+                onDeleteServiceOrder={async (id) => { await apiCall(`service-orders/${id}`, 'DELETE'); fetchData('service-orders', setServiceOrders); fetchData('transactions', setTransactions); }} 
+                onToggleStatus={async (id, data) => { 
+                    const res = await apiCall(`service-orders/${id}/toggle-status`, 'POST', data); 
+                    if(res) { 
+                        fetchData('service-orders', setServiceOrders); 
+                        fetchData('transactions', setTransactions); 
+                        fetchData('customers', setCustomers); 
+                        return res; 
+                    } 
+                }} 
+                setActivePage={setActivePage} 
+                goals={goals} 
+            />;
+            case 'products': return <Products 
+                products={products} 
+                ticketSales={ticketSales} 
+                onAddProduct={async (p) => { await apiCall('products', 'POST', p); fetchData('products', setProducts); }} 
+                onUpdateProduct={async (p) => { await apiCall(`products/${p.id}`, 'PUT', p); fetchData('products', setProducts); }} 
+                onDeleteProduct={async (id) => { await apiCall(`products/${id}`, 'DELETE'); fetchData('products', setProducts); }} 
+                goals={goals}
+                initialFilterLowMargin={passLowMarginFilter}
+            />;
+            case 'services': return <Services services={services} onAddService={async (s) => { await apiCall('services', 'POST', s); fetchData('services', setServices); }} onUpdateService={async (s) => { await apiCall(`services/${s.id}`, 'PUT', s); fetchData('services', setServices); }} onDeleteService={async (id) => { await apiCall(`services/${id}`, 'DELETE'); fetchData('services', setServices); }} goals={goals} />;
+            case 'customers': return <Customers customers={customers} ticketSales={ticketSales} serviceOrders={serviceOrders} onAddCustomer={async (c) => { await apiCall('customers', 'POST', c); fetchData('customers', setCustomers); }} onUpdateCustomer={async (c) => { await apiCall(`customers/${c.id}`, 'PUT', c); fetchData('customers', setCustomers); }} onDeleteCustomer={async (id) => { await apiCall(`customers/${id}`, 'DELETE'); fetchData('customers', setCustomers); }} />;
+            case 'suppliers': return <Suppliers suppliers={suppliers} onAddSupplier={async (s) => { await apiCall('suppliers', 'POST', s); fetchData('suppliers', setSuppliers); }} onUpdateSupplier={async (s) => { await apiCall(`suppliers/${s.id}`, 'PUT', s); fetchData('suppliers', setSuppliers); }} onDeleteSupplier={async (id) => { await apiCall(`suppliers/${id}`, 'DELETE'); fetchData('suppliers', setSuppliers); }} />;
+            case 'users': return <Users users={users} onAddUser={async (u) => { await apiCall('users', 'POST', u); fetchData('users', setUsers); }} onUpdateUser={async (u) => { await apiCall(`users/${u.id}`, 'PUT', u); fetchData('users', setUsers); }} onDeleteUser={async (id) => { await apiCall(`users/${id}`, 'DELETE'); fetchData('users', setUsers); }} />;
+            case 'profile': return <Profile onUpdateProfile={async (u) => { const res = await apiCall('users/profile', 'PUT', u); if (res) updateUserInContext(res); return res; }} />;
+            default: return <Dashboard transactions={transactions} ticketSales={ticketSales} products={products} goals={goals} onSaveGoals={handleSaveGoals} />;
+        }
+    };
+
+    if (!isBootstrapComplete) return <div className="flex h-screen items-center justify-center bg-gray-100 dark:bg-gray-900"><div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div></div>;
 
     return (
         <div className="flex h-screen bg-gray-100 dark:bg-gray-900 overflow-hidden">
-            {/* PaymentSuccessModal rendered based on state set by URL query params */}
             {paymentSuccessType && (
                 <PaymentSuccessModal
                     type={paymentSuccessType}
@@ -260,16 +519,25 @@ const Layout: React.FC = () => {
             
             <BroadcastModal messages={broadcasts} onRead={handleReadBroadcast} />
             
-            {isSystemBlocked && <BlockScreen onClose={() => setShowStatusModal(true)} />}
+            {(isSystemBlocked || user?.paymentRequired) && (
+                 <div className="fixed inset-0 z-50 bg-gray-900 flex flex-col items-center justify-center p-4">
+                     <SystemStatusModal 
+                        onClose={() => { }} 
+                        isFirstRun={false} 
+                        initialPaymentRequest={immediatePaymentRequest}
+                        initialPublicKey={immediatePublicKey} 
+                    />
+                 </div>
+            )}
             
-            {showStatusModal && <SystemStatusModal 
+            {!user?.paymentRequired && showStatusModal && <SystemStatusModal 
                 onClose={handleCloseStatusModal} 
                 isFirstRun={isFirstRunST} 
                 initialPaymentRequest={immediatePaymentRequest}
                 initialPublicKey={immediatePublicKey} 
             />}
             
-            <NotificationModal isOpen={notification.isOpen} type={notification.type} message={notification.message} onClose={() => setNotification({ ...notification, isOpen: false })} />
+            <NotificationModal isOpen={notification.isOpen} type={notification.type as any} message={notification.message} onClose={() => setNotification({ ...notification, isOpen: false })} />
 
             <ExpirationAlertModal 
                 isOpen={expirationAlert.isOpen}
@@ -372,11 +640,9 @@ const Layout: React.FC = () => {
 
             <SystemStatusFeedbackModal isOpen={showFeedbackModal} onClose={() => setShowFeedbackModal(false)} />
             
-            {/* Migration Warning Modal REMOVED */}
+            {showWelcomeModal && !isSystemBlocked && !user?.paymentRequired && <WelcomeModal isOpen={true} onClose={handleWelcomeClose} />}
 
-            {showWelcomeModal && !isSystemBlocked && <WelcomeModal isOpen={true} onClose={handleWelcomeClose} />}
-
-            {showSetupWizard && !showWelcomeModal && !isSystemBlocked && !isFirstRunST && (
+            {showSetupWizard && !showWelcomeModal && !isSystemBlocked && !user?.paymentRequired && !isFirstRunST && (
                 <GoalsModal currentGoals={goals} onSave={handleSaveGoals} onClose={() => {}} forceSetup={true} />
             )}
             
@@ -388,20 +654,22 @@ const Layout: React.FC = () => {
                 </div>
             )}
 
-            {/* Mobile Header and Sidebar (Same as before) */}
-            
-            <Sidebar 
-                activePage={activePage} 
-                setActivePage={setActivePage} 
-                isOpen={isSidebarOpen} 
-                onClose={() => setIsSidebarOpen(false)} 
-                companyName={goals.companyInfo?.name || goals.tenantName} 
-                hasEcommerce={goals.googleBusiness?.hasExternalEcommerce}
-            />
-            
-            <main className="flex-1 flex flex-col h-full overflow-hidden lg:ml-64 pt-16 lg:pt-0">
-                <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">{renderContent()}</div>
-            </main>
+            {!user?.paymentRequired && (
+                <>
+                    <Sidebar 
+                        activePage={activePage} 
+                        setActivePage={setActivePage} 
+                        isOpen={isSidebarOpen} 
+                        onClose={() => setIsSidebarOpen(false)} 
+                        companyName={goals.companyInfo?.name || goals.tenantName} 
+                        hasEcommerce={goals.googleBusiness?.hasExternalEcommerce}
+                    />
+                    
+                    <main className="flex-1 flex flex-col h-full overflow-hidden lg:ml-64 pt-16 lg:pt-0">
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-6 lg:p-8">{renderContent()}</div>
+                    </main>
+                </>
+            )}
         </div>
     );
 };
