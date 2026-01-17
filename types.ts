@@ -5,6 +5,7 @@ export interface User {
   role: UserRole;
   password?: string;
   tenantId?: string;
+  paymentRequired?: boolean; // Nova flag
 }
 
 export enum UserRole {
