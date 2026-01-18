@@ -118,7 +118,7 @@ const PaymentModal: React.FC<{ request: Request, publicKey: string, onClose: () 
 }
 
 const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstRun = false, initialPaymentRequest = null, initialPublicKey = '' }) => {
-    const { token, apiCall, logout, user } = React.useContext(AuthContext); 
+    const { token, apiCall, logout, user } = useContext(AuthContext); 
     const [statusData, setStatusData] = useState<SubscriptionStatus | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     
@@ -134,7 +134,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
     const [showGoogleForm, setShowGoogleForm] = useState(false);
     const [showEcommerceDetail, setShowEcommerceDetail] = useState(false);
     const [showEcommerceForm, setShowEcommerceForm] = useState(false); 
-    const [showSingleTenantDetail, setShowSingleTenantDetail] = useState(false); 
     const [showBundleMigration, setShowBundleMigration] = useState(false);
     const [showEcomLossWarning, setShowEcomLossWarning] = useState(false);
     
@@ -316,20 +315,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
         } catch (e) { setNotification({ isOpen: true, type: 'error', message: "Erro ao salvar." }); } finally { setIsUpdatingDay(false); }
     };
 
-    const handleCheckUpgradeBasic = () => {
-        const hasActiveTrialEcommerce = statusData?.requests?.some((r: any) => 
-            r.type === 'ecommerce' && (r.status === 'completed' || r.status === 'approved')
-        );
-
-        if (hasActiveTrialEcommerce) {
-            setShowSingleTenantDetail(false);
-            setShowEcomLossWarning(true);
-        } else {
-            setShowSingleTenantDetail(false);
-            handleRequest('upgrade', { plan: 'basic' });
-        }
-    };
-
     const handleOpenStore = () => {
         const tenantName = storeGoals?.tenantName || storeGoals?.companyInfo.name;
         if (tenantName) {
@@ -350,7 +335,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
     if (showEcommerceDetail) return <EcommerceDetailModal isOpen={true} onClose={() => setShowEcommerceDetail(false)} onRequest={() => { setShowEcommerceDetail(false); setShowEcommerceForm(true); }} isTrial={statusData?.plan === 'trial'} />;
     if (showEcommerceForm && storeGoals) return <EcommerceFormModal isOpen={true} onClose={() => setShowEcommerceForm(false)} onSubmit={handleEcommerceFormSubmit} goals={storeGoals} isTrial={statusData?.plan === 'trial'} extensionCount={statusData?.extensionCount || 0} trialEndsAt={statusData?.trialEndsAt || ''} />;
     
-    if (showSingleTenantDetail) return <SingleTenantDetailModal isOpen={true} onClose={() => setShowSingleTenantDetail(false)} onRequestUpgrade={handleCheckUpgradeBasic} onRequestBundle={() => { setShowSingleTenantDetail(false); setShowBundleMigration(true); }} />;
     if (showBundleMigration) return <BundleMigrationModal isOpen={true} onClose={() => setShowBundleMigration(false)} onSubmit={handleBundleSubmit} tenantName={storeGoals?.tenantName || storeGoals?.companyInfo.name || 'loja'} />;
 
     if (showEcomLossWarning) return <EcommerceLossWarningModal 
@@ -539,10 +523,10 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
                                             <h4 className="font-bold text-lg mb-1">Assinar Plano Oficial</h4>
                                             <p className="text-indigo-100 text-sm mb-4">Garanta seu acesso contínuo e recursos avançados.</p>
                                             <button 
-                                                onClick={() => setShowSingleTenantDetail(true)}
+                                                onClick={() => handleRequest('monthly')}
                                                 className="w-full py-3 bg-white text-indigo-900 font-bold rounded-lg hover:bg-gray-100 shadow-md transition-colors"
                                             >
-                                                Ver Planos
+                                                Assinar Agora
                                             </button>
                                         </div>
                                     </div>
@@ -589,4 +573,3 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
 };
 
 export default SystemStatusModal;
-
