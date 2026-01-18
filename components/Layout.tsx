@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useContext } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
 import { SAAS_API_URL } from '../config';
 import Sidebar from './Sidebar';
@@ -25,7 +25,6 @@ import GoogleBusinessFormModal from './GoogleBusinessFormModal';
 import GoogleSuccessModal from './GoogleSuccessModal';
 import EcommerceDetailModal from './EcommerceDetailModal';
 import EcommerceFormModal from './EcommerceFormModal';
-import SingleTenantDetailModal from './SingleTenantDetailModal';
 import BundleMigrationModal from './BundleMigrationModal';
 import GoogleVerificationAlertModal, { GrowthVariant } from './GoogleVerificationAlertModal';
 import BroadcastModal from './BroadcastModal';
@@ -164,7 +163,6 @@ const Layout: React.FC = () => {
     const [showFeedbackModal, setShowFeedbackModal] = useState(false);
     const [showEcommerceDetail, setShowEcommerceDetail] = useState(false); 
     const [showEcommerceForm, setShowEcommerceForm] = useState(false);
-    const [showSingleTenantDetail, setShowSingleTenantDetail] = useState(false);
     
     // NEW MODALS
     const [showBundleMigrationModal, setShowBundleMigrationModal] = useState(false);
@@ -410,7 +408,7 @@ const Layout: React.FC = () => {
         setGrowthAlertVariant(null);
         if (growthAlertVariant === 'verify' || growthAlertVariant === 'maps_offer') setShowGoogleVerification(true);
         if (growthAlertVariant === 'ecommerce_offer') setShowEcommerceDetail(true);
-        if (growthAlertVariant === 'single_tenant_offer') setShowSingleTenantDetail(true);
+        if (growthAlertVariant === 'single_tenant_offer') setShowStatusModal(true);
     };
 
     const handleVerificationComplete = () => {
@@ -430,7 +428,7 @@ const Layout: React.FC = () => {
 
     const handleConfirmBasicUpgrade = () => { setShowEcomLossWarning(false); setShowStatusModal(true); };
     const handleUpgradeBundleClick = () => { setShowEcomLossWarning(false); setShowBundleMigrationModal(true); };
-    const handleUpgradeBasicClick = () => { setShowSingleTenantDetail(false); setShowEcomLossWarning(true); }; // Check first
+    const handleUpgradeBasicClick = () => { setShowEcomLossWarning(true); }; // Check first
 
     const handleReviewLowMargins = () => {
         setShowLowMarginAlert(false);
@@ -608,15 +606,6 @@ const Layout: React.FC = () => {
                     isTrial={isTrialMode}
                     extensionCount={billingStatusData?.extensionCount || 0}
                     trialEndsAt={billingStatusData?.trialEndsAt || ''}
-                />
-            )}
-
-            {showSingleTenantDetail && (
-                <SingleTenantDetailModal
-                    isOpen={true}
-                    onClose={() => setShowSingleTenantDetail(false)}
-                    onRequestUpgrade={handleUpgradeBasicClick} 
-                    onRequestBundle={handleUpgradeBundleClick} 
                 />
             )}
 
