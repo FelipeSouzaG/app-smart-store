@@ -8,7 +8,6 @@ import GoogleVerificationModal from './GoogleVerificationModal';
 import GoogleBusinessFormModal from './GoogleBusinessFormModal';
 import EcommerceDetailModal from './EcommerceDetailModal'; 
 import EcommerceFormModal from './EcommerceFormModal';
-import SingleTenantDetailModal from './SingleTenantDetailModal'; 
 import BundleMigrationModal from './BundleMigrationModal';
 import { KpiGoals } from '../types';
 
@@ -590,3 +589,4 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = ({ onClose, isFirstR
 };
 
 export default SystemStatusModal;
+
