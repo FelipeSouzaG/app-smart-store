@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useContext } from 'react';
 import { AuthContext } from '../contexts/AuthContext';
 import { navItems } from '../constants';
 
@@ -82,7 +82,7 @@ const getIcon = (iconKey: string) => {
 };
 
 const Sidebar: React.FC<SidebarProps> = ({ activePage, setActivePage, isOpen, onClose, companyName, hasEcommerce }) => {
-    const { user, logout } = React.useContext(AuthContext);
+    const { user, logout } = useContext(AuthContext);
 
     if (!user) return null;
 
