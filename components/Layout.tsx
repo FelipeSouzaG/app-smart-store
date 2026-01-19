@@ -388,6 +388,7 @@ const Layout: React.FC = () => {
         if (updated) { 
             setGoals(updated); 
             setIsFirstRunST(false);
+            setShowSetupWizard(false); // Force close wizard
             
             // Re-check for low margins after update
             if (activePage === 'products') {
@@ -417,9 +418,13 @@ const Layout: React.FC = () => {
     };
 
     const handleServiceRequestFromVerification = (type: 'google_maps' | 'ecommerce') => {
-        // Logic handled inside SystemStatusModal for actual request, here we just trigger UI
-        setShowStatusModal(true);
-        // Note: Ideally pass a prop to SystemStatusModal to auto-open specific form
+        if (type === 'google_maps') {
+            setShowGoogleForm(true);
+        } else if (type === 'ecommerce') {
+            setShowEcommerceDetail(true);
+        } else {
+             setShowStatusModal(true);
+        }
     };
 
     const handleGoogleFormSubmit = (formData: any) => { setShowGoogleForm(false); setShowStatusModal(true); }; // In reality, SystemStatusModal handles submission
@@ -633,7 +638,7 @@ const Layout: React.FC = () => {
             {showWelcomeModal && !isSystemBlocked && !user?.paymentRequired && <WelcomeModal isOpen={true} onClose={handleWelcomeClose} />}
 
             {showSetupWizard && !showWelcomeModal && !isSystemBlocked && !user?.paymentRequired && !isFirstRunST && (
-                <GoalsModal currentGoals={goals} onSave={handleSaveGoals} onClose={() => {}} forceSetup={true} />
+                <GoalsModal currentGoals={goals} onSave={handleSaveGoals} onClose={() => setShowSetupWizard(false)} forceSetup={true} />
             )}
             
             {isVerifyingPayment && (
