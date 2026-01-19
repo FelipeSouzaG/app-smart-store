@@ -328,10 +328,16 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
 
     // Google Maps Logic
     const mapsRequest = statusData.requests.find(r => r.type === 'google_maps');
-    const isMapsPending = mapsRequest && (mapsRequest.status === 'pending' || mapsRequest.status === 'waiting_payment');
-    const isMapsCompleted = (mapsRequest && (mapsRequest.status === 'completed' || mapsRequest.status === 'approved')) || googleStatus === 'verified';
+    // Pago mas não concluído = Em execução (Aprovado)
+    const isMapsExecutionPending = mapsRequest && mapsRequest.status === 'approved';
+    // Pagamento pendente
+    const isMapsPaymentPending = mapsRequest && (mapsRequest.status === 'pending' || mapsRequest.status === 'waiting_payment');
+    // Concluído (Serviço Executado) OU Já Verificado via Insights
+    const isMapsCompleted = (mapsRequest && mapsRequest.status === 'completed') || googleStatus === 'verified';
     
     // Ecommerce Logic
+    // Verifica se existe um request de ecommerce ativo ou concluído. 
+    // Em Trial, o request tem status 'approved' ou 'completed' com amount=0.
     const ecommerceRequest = statusData.requests.find(r => r.type === 'ecommerce' && (r.status === 'completed' || r.status === 'approved'));
 
     return (
@@ -427,7 +433,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                                                 </div>
                                                 <a href={storeGoals?.googleBusiness?.mapsUri || '#'} target="_blank" className="px-4 py-2 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 text-xs">Ver Perfil no Google</a>
                                             </div>
-                                        ) : isMapsPending ? (
+                                        ) : isMapsExecutionPending ? (
                                             <div>
                                                 <h3 className="font-bold text-lg text-blue-600 dark:text-blue-400">Presença no Google Em Andamento</h3>
                                                 <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Estamos configurando a {storeGoals?.companyInfo.name} no Google. Você será notificado quando estiver tudo pronto. Por favor, aguarde.</p>
@@ -439,9 +445,15 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                                                     85% dos consumidores pesquisam lojas no Google antes de ir ao local. A {storeGoals?.companyInfo.name} pode estar perdendo vendas para concorrentes. 
                                                     Configuramos sua Loja no Google para marcar presença e estar no radar dos consumidores.
                                                 </p>
-                                                <button onClick={onOpenGoogleForm} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition-transform hover:scale-105">
-                                                    Solicitar Presença por R$ 297,00
-                                                </button>
+                                                {isMapsPaymentPending ? (
+                                                     <button onClick={() => setPaymentRequest(mapsRequest)} className="w-full py-3 bg-yellow-600 hover:bg-yellow-700 text-white font-bold rounded-lg shadow-md transition-transform hover:scale-105">
+                                                        Concluir Pagamento (Pendente)
+                                                    </button>
+                                                ) : (
+                                                    <button onClick={onOpenGoogleForm} className="w-full py-3 bg-indigo-600 hover:bg-indigo-700 text-white font-bold rounded-lg shadow-md transition-transform hover:scale-105">
+                                                        Solicitar Presença por R$ 297,00
+                                                    </button>
+                                                )}
                                             </div>
                                         ) : (
                                             <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
@@ -464,53 +476,37 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                                             <div className="flex justify-between items-center">
                                                 <div>
                                                     <h3 className="font-bold text-lg text-purple-600 dark:text-purple-400">Loja Online Smart-Commerce</h3>
-                                                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">Módulo loja online Ativo.</p>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
+                                                        {statusData.plan === 'trial' 
+                                                            ? `Degustação de Loja Online em andamento. ${trialDaysRemaining} dias restantes.`
+                                                            : 'Módulo loja online Ativo.'
+                                                        }
+                                                    </p>
                                                 </div>
                                                 <button onClick={handleOpenStore} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-sm text-xs">
                                                     Ver Loja Online
                                                 </button>
                                             </div>
                                         ) : (
-                                            !isSingleTenant ? (
-                                                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                                                    <div>
-                                                        <h3 className="font-bold text-lg text-gray-900 dark:text-white">Loja Online Smart-Commerce</h3>
-                                                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 max-w-sm">
-                                                            {statusData.plan === 'trial' 
-                                                                ? `Degustação de Loja Online em andamento. ${trialDaysRemaining} dias restantes.`
-                                                                : `Acelere suas vendas abrindo as "Portas da ${storeGoals?.companyInfo.name}" na internet. Ative o modo "Loja Online" para vender no Site por 15 dias gratuitamente.`
-                                                            }
-                                                        </p>
-                                                    </div>
-                                                    {statusData.plan === 'trial' ? (
-                                                         <button onClick={handleOpenStore} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-sm whitespace-nowrap">
-                                                            Ver Loja Online
-                                                        </button>
-                                                    ) : (
-                                                        <button onClick={() => handleRequest('ecommerce', { isTrial: true })} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-sm whitespace-nowrap">
-                                                            Ativar Loja Online
-                                                        </button>
-                                                    )}
+                                            // Se não tiver request, mostra o botão para ativar, seja Trial ou Pago
+                                            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                                                <div>
+                                                    <h3 className="font-bold text-lg text-gray-900 dark:text-white">Loja Online Smart-Commerce</h3>
+                                                    <p className="text-sm text-gray-600 dark:text-gray-300 mt-1 max-w-sm">
+                                                        Acelere suas vendas abrindo as "Portas da {storeGoals?.companyInfo.name}" na internet. 
+                                                        {statusData.plan === 'trial' ? ' Ative o modo "Loja Online" para vender no Site por 15 dias gratuitamente.' : ' Integre sua loja física com o mundo digital.'}
+                                                    </p>
                                                 </div>
-                                            ) : (
-                                                 // Active Tenant (Paid) but no Ecommerce yet (Upsell)
-                                                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                                                    <div>
-                                                        <h3 className="font-bold text-lg text-gray-900 dark:text-white">Loja Online Smart-Commerce</h3>
-                                                        <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
-                                                            Degustação de Loja Online em andamento. {trialDaysRemaining} dias para término da experimentação.
-                                                        </p>
-                                                    </div>
-                                                    <div className="flex gap-2">
-                                                        <button onClick={handleOpenStore} className="px-4 py-2 border border-purple-600 text-purple-600 dark:text-purple-400 font-bold rounded-lg hover:bg-purple-50 dark:hover:bg-purple-900/20 text-xs">
-                                                            Ver Loja Online
-                                                        </button>
-                                                        <button onClick={onOpenEcommerceDetails} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-sm text-xs">
-                                                            Ativar Loja
-                                                        </button>
-                                                    </div>
-                                                </div>
-                                            )
+                                                {statusData.plan === 'trial' ? (
+                                                     <button onClick={() => handleRequest('ecommerce', { isTrial: true })} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-sm whitespace-nowrap">
+                                                        Ativar Loja Online
+                                                    </button>
+                                                ) : (
+                                                    <button onClick={onOpenEcommerceDetails} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-sm text-xs">
+                                                        Ativar Loja
+                                                    </button>
+                                                )}
+                                            </div>
                                         )}
                                     </div>
                                 </div>
