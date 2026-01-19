@@ -192,6 +192,14 @@ const Layout: React.FC = () => {
         const data = await apiCall(endpoint, 'GET');
         if (data) setter(data);
     };
+    
+    // CRITICAL: Refresh goals (settings) to update UI after provisioning
+    const refreshGoals = async () => {
+        const settings = await apiCall('settings', 'GET');
+        if (settings) {
+            setGoals(prev => ({ ...prev, ...settings }));
+        }
+    };
 
     const fetchBroadcasts = async () => {
         const data = await apiCall('system/broadcasts', 'GET');
@@ -242,10 +250,8 @@ const Layout: React.FC = () => {
                 setIsTrialMode(billingData.plan === 'trial');
                 setBillingStatusData(billingData);
 
-                const settings = await apiCall('settings', 'GET');
-                if (settings) {
-                    setGoals(prev => ({ ...prev, ...settings }));
-                }
+                // Fetch Settings (Goals)
+                await refreshGoals();
 
                 type AppAction = 'block' | 'setup_st' | 'welcome' | 'google_success' | 'expiration_alert' | 'growth' | 'force_contract' | 'none';
                 let determinedAction: AppAction = 'none';
@@ -264,18 +270,28 @@ const Layout: React.FC = () => {
                 }
 
                 // PRIORITY 4: WELCOME / SETUP WIZARD (LOGIC FIX)
-                if (determinedAction === 'none' && settings) {
-                    if (!settings.isSetupComplete) {
-                        determinedAction = 'welcome';
-                    } 
-                    else if (checkCriticalDataMissing(settings)) {
-                         determinedAction = 'force_contract';
-                    }
-                }
+                if (determinedAction === 'none') {
+                    // Need to check goals state here, but it's set async above. 
+                    // However, for bootstrap logic, we can rely on what we fetch or defer to next render.
+                    // For safety, we fetch once more if goals is empty or wait.
+                    // Actually, the apiCall above waits. So we can use the result if we captured it.
+                    // Let's re-fetch to be safe inside this closure variable since setState is async
+                    const settings = await apiCall('settings', 'GET');
 
-                // PRIORITY 5: GOOGLE SUCCESS (Verified but didn't see modal yet)
-                if (determinedAction === 'none' && settings && settings.googleBusiness?.status === 'verified' && !settings.googleBusiness?.successShown) {
-                    determinedAction = 'google_success';
+                    if (settings) {
+                        if (!settings.isSetupComplete) {
+                            determinedAction = 'welcome';
+                        } 
+                        else if (checkCriticalDataMissing(settings)) {
+                             determinedAction = 'force_contract';
+                        }
+                    
+                        // PRIORITY 5: GOOGLE SUCCESS (Verified but didn't see modal yet)
+                        if (determinedAction === 'none' && settings.googleBusiness?.status === 'verified' && !settings.googleBusiness?.successShown) {
+                            determinedAction = 'google_success';
+                            setGoogleSuccessLink(settings.googleBusiness?.mapsUri || '');
+                        }
+                    }
                 }
 
                 // PRIORITY 6.5: EXPIRATION ALERT (Monthly OR Trial)
@@ -299,8 +315,9 @@ const Layout: React.FC = () => {
                 }
 
                 // PRIORITY 7: GROWTH FUNNEL
-                if (determinedAction === 'none' && settings && (user.role === 'owner' || user.role === 'manager') && !isPaymentReturn) {
-                    const gBus = settings.googleBusiness || {};
+                if (determinedAction === 'none' && goals && (user.role === 'owner' || user.role === 'manager') && !isPaymentReturn) {
+                    const settings = await apiCall('settings', 'GET'); // Fresh data
+                    const gBus = settings?.googleBusiness || {};
                     const googleStatus = gBus.status || 'unverified';
                     const isDismissed = gBus.dismissedPrompt === true;
                     const sessionChecked = sessionStorage.getItem('growthAlertSeen');
@@ -344,7 +361,6 @@ const Layout: React.FC = () => {
                 } else if (determinedAction === 'force_contract') {
                     setShowSetupWizard(true);
                 } else if (determinedAction === 'google_success') {
-                    setGoogleSuccessLink(settings.googleBusiness?.mapsUri || '');
                     setShowGoogleSuccess(true);
                 } else if (determinedAction === 'expiration_alert') {
                     setExpirationAlert({ isOpen: true, variant: expVariant, daysLeft: expDaysLeft });
@@ -417,7 +433,7 @@ const Layout: React.FC = () => {
 
     const handleVerificationComplete = () => {
         // Refresh settings to check status
-        apiCall('settings', 'GET').then(data => { if(data) setGoals(prev => ({...prev, ...data})); });
+        refreshGoals();
     };
 
     const handleServiceRequestFromVerification = (type: 'google_maps' | 'ecommerce') => {
@@ -557,6 +573,8 @@ const Layout: React.FC = () => {
                 onOpenGoogleVerification={() => { setShowStatusModal(false); setShowGoogleVerification(true); }}
                 onOpenGoogleForm={() => { setShowStatusModal(false); setShowGoogleForm(true); }}
                 onOpenEcommerceDetails={() => { setShowStatusModal(false); setShowEcommerceDetail(true); }}
+                onOpenEcommerceForm={() => { setShowStatusModal(false); setShowEcommerceForm(true); }}
+                onRefreshData={refreshGoals}
             />}
             
             <NotificationModal isOpen={notification.isOpen} type={notification.type as any} message={notification.message} onClose={() => setNotification({ ...notification, isOpen: false })} />
