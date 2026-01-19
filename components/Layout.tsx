@@ -180,6 +180,9 @@ const Layout: React.FC = () => {
     const [immediatePublicKey, setImmediatePublicKey] = useState<string>(''); 
     const [paymentSuccessType, setPaymentSuccessType] = useState<string | null>(null);
     const [isVerifyingPayment, setIsVerifyingPayment] = useState(false);
+    
+    // NEW STATE: Pending Service Payload for Handover to Payment
+    const [pendingServicePayload, setPendingServicePayload] = useState<{ type: string, payload: any } | null>(null);
 
     const checkCriticalDataMissing = (settings: KpiGoals) => {
          return !settings.companyInfo?.name || !settings.companyInfo?.address?.cep;
@@ -427,8 +430,18 @@ const Layout: React.FC = () => {
         }
     };
 
-    const handleGoogleFormSubmit = (formData: any) => { setShowGoogleForm(false); setShowStatusModal(true); }; // In reality, SystemStatusModal handles submission
-    const handleEcommerceFormSubmit = (formData: any) => { setShowEcommerceForm(false); setShowStatusModal(true); };
+    const handleGoogleFormSubmit = (formData: any) => { 
+        setShowGoogleForm(false); 
+        setPendingServicePayload({ type: 'google_maps', payload: formData });
+        setShowStatusModal(true);
+    };
+
+    const handleEcommerceFormSubmit = (formData: any) => { 
+        setShowEcommerceForm(false); 
+        setPendingServicePayload({ type: 'ecommerce', payload: formData });
+        setShowStatusModal(true);
+    };
+    
     const handleBundleMigrationSubmit = (formData: any) => { setShowBundleMigrationModal(false); setShowStatusModal(true); };
 
     const handleConfirmBasicUpgrade = () => { setShowEcomLossWarning(false); setShowStatusModal(true); };
@@ -538,7 +551,12 @@ const Layout: React.FC = () => {
                 onClose={handleCloseStatusModal} 
                 isFirstRun={isFirstRunST} 
                 initialPaymentRequest={immediatePaymentRequest}
-                initialPublicKey={immediatePublicKey} 
+                initialPublicKey={immediatePublicKey}
+                pendingServicePayload={pendingServicePayload}
+                onClearPendingPayload={() => setPendingServicePayload(null)}
+                onOpenGoogleVerification={() => { setShowStatusModal(false); setShowGoogleVerification(true); }}
+                onOpenGoogleForm={() => { setShowStatusModal(false); setShowGoogleForm(true); }}
+                onOpenEcommerceDetails={() => { setShowStatusModal(false); setShowEcommerceDetail(true); }}
             />}
             
             <NotificationModal isOpen={notification.isOpen} type={notification.type as any} message={notification.message} onClose={() => setNotification({ ...notification, isOpen: false })} />
