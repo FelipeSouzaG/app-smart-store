@@ -16,6 +16,8 @@ interface SystemStatusModalProps {
     onOpenGoogleVerification?: () => void;
     onOpenGoogleForm?: () => void;
     onOpenEcommerceDetails?: () => void;
+    onOpenEcommerceForm?: () => void;
+    onRefreshData?: () => Promise<void>;
 }
 
 interface Request {
@@ -93,7 +95,7 @@ const PaymentModal: React.FC<{ request: Request, publicKey: string, onClose: () 
 }
 
 const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
-    const { onClose, isFirstRun = false, initialPaymentRequest = null, initialPublicKey = '', pendingServicePayload, onClearPendingPayload, onOpenGoogleVerification, onOpenGoogleForm, onOpenEcommerceDetails } = props;
+    const { onClose, isFirstRun = false, initialPaymentRequest = null, initialPublicKey = '', pendingServicePayload, onClearPendingPayload, onOpenGoogleVerification, onOpenGoogleForm, onOpenEcommerceDetails, onOpenEcommerceForm, onRefreshData } = props;
     
     const { token, apiCall, logout, user } = useContext(AuthContext); 
     const [statusData, setStatusData] = useState<SubscriptionStatus | null>(null);
@@ -220,6 +222,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
         setPaymentRequest(null);
         setShowServiceSuccess(true);
         fetchStatus(true);
+        if (onRefreshData) onRefreshData(); // Trigger parent refresh (e.g. Layout to unlock sidebar)
     };
 
     const handleManualClosePayment = async () => {
@@ -241,6 +244,12 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
              if (onOpenGoogleForm) onOpenGoogleForm();
              return;
         }
+        if (type === 'ecommerce' && !payload) {
+             // Correctly open form instead of direct request if no payload
+             if (onOpenEcommerceForm) onOpenEcommerceForm();
+             return;
+        }
+
         try {
             const bodyData = { type, payload };
             const response = await fetch(`${SAAS_API_URL}/subscription/request`, {
@@ -261,6 +270,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                 } 
                 
                 if (data.message && type === 'ecommerce') {
+                     // For auto-approved trials, this might run
                      setNotification({ isOpen: true, type: 'success', message: data.message });
                 }
             } else { 
@@ -305,7 +315,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                     </div>
                     <h3 className="text-2xl font-bold text-gray-900 dark:text-white mb-2">Sucesso!</h3>
                     <p className="text-gray-500 dark:text-gray-300 mb-6">Operação realizada.</p>
-                    <button onClick={() => { setShowServiceSuccess(false); onClose(); window.location.reload(); }} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-colors">Continuar</button>
+                    <button onClick={() => { setShowServiceSuccess(false); onClose(); }} className="w-full py-3 bg-green-600 hover:bg-green-700 text-white font-bold rounded-xl transition-colors">Continuar</button>
                 </div>
             </div>
         );
@@ -498,7 +508,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                                                     </p>
                                                 </div>
                                                 {statusData.plan === 'trial' ? (
-                                                     <button onClick={() => handleRequest('ecommerce', { isTrial: true })} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-sm whitespace-nowrap">
+                                                     <button onClick={onOpenEcommerceForm} className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg shadow-sm whitespace-nowrap">
                                                         Ativar Loja Online
                                                     </button>
                                                 ) : (
