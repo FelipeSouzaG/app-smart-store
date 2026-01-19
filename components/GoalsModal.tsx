@@ -201,11 +201,18 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
 
     const handleFinancialChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const { name, value, type, checked } = e.target;
+        // Basic sanitization for days
+        let val = parseInt(value) || 0;
+        if (type === 'number') {
+             // Just sanitizing negative, limits checked in validation
+             if (val < 0) val = 1;
+        }
+
         setGoals(prev => ({
             ...prev,
             financialSettings: {
                 ...prev.financialSettings!,
-                [name]: type === 'checkbox' ? checked : (parseInt(value) || 1)
+                [name]: type === 'checkbox' ? checked : val
             }
         }));
     };
@@ -372,12 +379,16 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
         };
         
         await onSave(finalGoals);
-        if (!forceSetup) onClose();
+        // Force close after save, regardless of forceSetup, because the process is complete
+        onClose(); 
     };
 
     // Calculate URL for contract link
     // Assuming app-fluxoclean is hosting the landing page and auth logic
     const contractUrl = SAAS_LOGIN_URL.replace('/login', '/contract');
+
+    // Validation helper for financial day inputs
+    const isDayValid = (day: number) => day >= 1 && day <= 31;
 
     return (
          <div className="fixed inset-0 bg-black bg-opacity-80 backdrop-blur-sm flex items-center justify-center z-50 p-4 overflow-y-auto">
@@ -746,7 +757,7 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                                     <div className="flex items-center space-x-3">
                                         <div className="bg-transparent">
                                           <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" fill="currentColor" viewBox="0 0 16 16">
-                                            <path d="M8.277.084a.5.5 0 0 0-.554 0l-7.5 5A.5.5 0 0 0 .5 6h1.875v7H1.5a.5.5 0 0 0 0 1h13a.5.5 0 1 0 0-1h-.875V6H15.5a.5.5 0 0 0 .277-.916zM12.375 6v7h-1.25V6zm-2.5 0v7h-1.25V6zm-2.5 0v7h-1.25V6zm-2.5 0v7h-1.25V6zM8 4a1 1 0 1 1 0-2 1 1 0 0 1 0 2M.5 15a.5.5 0 0 0 0 1h15a.5.5 0 1 0 0-1z"/>
+                                            <path d="M8.277.084a.5.5 0 0 0-.554 0l-7.5 5A.5.5 0 0 0 .5 6h1.875v7H1.5a.5.5 0 0 0 0 1h13a.5.5 0 1 0 0-1h-.875V6H15.5a.5.5 0 0 0 .277-.916zM12.375 6v7h-1.25V6zm-2.5 0v7h-1.25V6zm-2.5 0v7h-1.25V6zm-2.5 0v7h-1.25V6zm-2.5 0v7h-1.25V6zM8 4a1 1 0 1 1 0-2 1 1 0 0 1 0 2M.5 15a.5.5 0 0 0 0 1h15a.5.5 0 1 0 0-1z"/>
                                           </svg>
                                         </div>
                                         <div>
@@ -796,8 +807,9 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                                                     min="1" max="31"
                                                     value={goals.financialSettings.cardClosingDay} 
                                                     onChange={handleFinancialChange}
-                                                    className="w-full rounded-md border-gray-300 dark:border-gray-500 dark:bg-gray-600 p-2 text-center"
+                                                    className={`w-full rounded-md border p-2 text-center dark:bg-gray-600 ${!isDayValid(goals.financialSettings.cardClosingDay) ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300 dark:border-gray-500'}`}
                                                 />
+                                                {!isDayValid(goals.financialSettings.cardClosingDay) && <p className="text-[10px] text-red-500 mt-1">Inválido (1-31)</p>}
                                             </div>
                                             <div>
                                                 <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Dia do Vencimento da Fatura</label>
@@ -807,8 +819,9 @@ const GoalsModal: React.FC<GoalsModalProps> = ({ currentGoals, onSave, onClose, 
                                                     min="1" max="31"
                                                     value={goals.financialSettings.cardDueDay} 
                                                     onChange={handleFinancialChange}
-                                                    className="w-full rounded-md border-gray-300 dark:border-gray-500 dark:bg-gray-600 p-2 text-center"
+                                                    className={`w-full rounded-md border p-2 text-center dark:bg-gray-600 ${!isDayValid(goals.financialSettings.cardDueDay) ? 'border-red-500 ring-1 ring-red-500' : 'border-gray-300 dark:border-gray-500'}`}
                                                 />
+                                                {!isDayValid(goals.financialSettings.cardDueDay) && <p className="text-[10px] text-red-500 mt-1">Inválido (1-31)</p>}
                                             </div>
                                         </div>
                                     )}
