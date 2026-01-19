@@ -240,12 +240,12 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
     };
 
     const handleRequest = async (type: 'extension' | 'upgrade' | 'migrate' | 'monthly' | 'google_maps' | 'ecommerce', payload?: any) => {
+        // Intercept manual requests to show forms instead of calling API directly
         if (type === 'google_maps' && !payload) {
              if (onOpenGoogleForm) onOpenGoogleForm();
              return;
         }
         if (type === 'ecommerce' && !payload) {
-             // Correctly open form instead of direct request if no payload
              if (onOpenEcommerceForm) onOpenEcommerceForm();
              return;
         }
@@ -262,7 +262,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                 if (data.publicKey) setMpPublicKey(data.publicKey);
                 
                 if (data.request) {
-                    if (data.request.status === 'approved') {
+                    if (data.request.status === 'approved' || data.request.status === 'completed') {
                         handlePaymentSuccess(data.request);
                     } else {
                         setPaymentRequest(data.request);
@@ -270,7 +270,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                 } 
                 
                 if (data.message && type === 'ecommerce') {
-                     // For auto-approved trials, this might run
                      setNotification({ isOpen: true, type: 'success', message: data.message });
                 }
             } else { 
@@ -338,16 +337,11 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
 
     // Google Maps Logic
     const mapsRequest = statusData.requests.find(r => r.type === 'google_maps');
-    // Pago mas não concluído = Em execução (Aprovado)
     const isMapsExecutionPending = mapsRequest && mapsRequest.status === 'approved';
-    // Pagamento pendente
     const isMapsPaymentPending = mapsRequest && (mapsRequest.status === 'pending' || mapsRequest.status === 'waiting_payment');
-    // Concluído (Serviço Executado) OU Já Verificado via Insights
     const isMapsCompleted = (mapsRequest && mapsRequest.status === 'completed') || googleStatus === 'verified';
     
     // Ecommerce Logic
-    // Verifica se existe um request de ecommerce ativo ou concluído. 
-    // Em Trial, o request tem status 'approved' ou 'completed' com amount=0.
     const ecommerceRequest = statusData.requests.find(r => r.type === 'ecommerce' && (r.status === 'completed' || r.status === 'approved'));
 
     return (
