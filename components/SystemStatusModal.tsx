@@ -17,6 +17,7 @@ interface SystemStatusModalProps {
     onOpenGoogleForm?: () => void;
     onOpenEcommerceDetails?: () => void;
     onOpenEcommerceForm?: () => void;
+    onOpenEcommercePolicies?: () => void; // Novo Handler
     onRefreshData?: () => Promise<void>;
 }
 
@@ -95,7 +96,7 @@ const PaymentModal: React.FC<{ request: Request, publicKey: string, onClose: () 
 }
 
 const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
-    const { onClose, isFirstRun = false, initialPaymentRequest = null, initialPublicKey = '', pendingServicePayload, onClearPendingPayload, onOpenGoogleVerification, onOpenGoogleForm, onOpenEcommerceDetails, onOpenEcommerceForm, onRefreshData } = props;
+    const { onClose, isFirstRun = false, initialPaymentRequest = null, initialPublicKey = '', pendingServicePayload, onClearPendingPayload, onOpenGoogleVerification, onOpenGoogleForm, onOpenEcommerceDetails, onOpenEcommerceForm, onOpenEcommercePolicies, onRefreshData } = props;
     
     const { token, apiCall, logout, user } = useContext(AuthContext); 
     const [statusData, setStatusData] = useState<SubscriptionStatus | null>(null);
@@ -222,7 +223,8 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
         setPaymentRequest(null);
         setShowServiceSuccess(true);
         fetchStatus(true);
-        if (onRefreshData) onRefreshData(); // Trigger parent refresh (e.g. Layout to unlock sidebar)
+        fetchGoogleStatus(); // Update local state (goals)
+        if (onRefreshData) onRefreshData(); 
     };
 
     const handleManualClosePayment = async () => {
@@ -240,7 +242,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
     };
 
     const handleRequest = async (type: 'extension' | 'upgrade' | 'migrate' | 'monthly' | 'google_maps' | 'ecommerce', payload?: any) => {
-        // Intercept manual requests to show forms instead of calling API directly
         if (type === 'google_maps' && !payload) {
              if (onOpenGoogleForm) onOpenGoogleForm();
              return;
@@ -293,13 +294,12 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
     };
 
     const handleOpenStore = () => {
-        const tenantName = storeGoals?.tenantName || storeGoals?.companyInfo.name;
+        const tenantName = storeGoals?.tenantName;
         if (tenantName) {
-            const isLocal = window.location.hostname.includes('local') || window.location.hostname.includes('localhost');
-            const url = isLocal 
-                ? `https://${tenantName}-smart-commerce.local.fluxoclean.com.br`
-                : `https://${tenantName}.fluxoclean.com.br`;
+            const url = `https://${tenantName}.fluxoclean.com.br`;
             window.open(url, '_blank');
+        } else {
+             setNotification({ isOpen: true, type: 'error', message: 'Endereço da loja não encontrado. Contate o suporte.' });
         }
     };
 
@@ -343,6 +343,8 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
     
     // Ecommerce Logic
     const ecommerceRequest = statusData.requests.find(r => r.type === 'ecommerce' && (r.status === 'completed' || r.status === 'approved'));
+    // CHECK if policies are configured to unlock the button
+    const isEcommerceConfigured = storeGoals?.ecommercePolicies?.configured === true;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-120 p-4">
@@ -477,7 +479,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                                     {/* 3. Loja Online Card */}
                                     <div className="bg-white dark:bg-gray-800 p-5 rounded-xl shadow-sm border border-gray-200 dark:border-gray-700">
                                         {ecommerceRequest ? (
-                                            <div className="flex justify-between items-center">
+                                            <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
                                                 <div>
                                                     <h3 className="font-bold text-lg text-purple-600 dark:text-purple-400">Loja Online Smart-Commerce</h3>
                                                     <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">
@@ -487,9 +489,23 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                                                         }
                                                     </p>
                                                 </div>
-                                                <button onClick={handleOpenStore} className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-sm text-xs">
-                                                    Ver Loja Online
-                                                </button>
+                                                
+                                                {/* CONDITIONAL RENDER: Configurar vs Ver Loja */}
+                                                {!isEcommerceConfigured ? (
+                                                    <button 
+                                                        onClick={onOpenEcommercePolicies} 
+                                                        className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg shadow-sm text-xs animate-pulse"
+                                                    >
+                                                        ⚠️ Configurar Políticas da Loja
+                                                    </button>
+                                                ) : (
+                                                    <button 
+                                                        onClick={handleOpenStore} 
+                                                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-sm text-xs"
+                                                    >
+                                                        Ver Loja Online
+                                                    </button>
+                                                )}
                                             </div>
                                         ) : (
                                             // Se não tiver request, mostra o botão para ativar, seja Trial ou Pago
