@@ -289,6 +289,7 @@ const Layout: React.FC = () => {
                         // This logic relies on successShown being reset to false when an update occurs via Admin
                         if (determinedAction === 'none' && settings.googleBusiness?.status === 'verified' && !settings.googleBusiness?.successShown) {
                             determinedAction = 'google_success';
+                            // Ensure mapsUri is present, otherwise fallback to empty to avoid error
                             setGoogleSuccessLink(settings.googleBusiness?.mapsUri || '');
                         }
                     }
@@ -446,8 +447,8 @@ const Layout: React.FC = () => {
         // Passa para o modal de pagamento/request do sistema
         setPendingServicePayload({ type: 'ecommerce', payload: formData });
         // Assim que o request for processado (mesmo trial é instantâneo), abrimos o modal de políticas
-        setShowStatusModal(true);
-        // O SystemStatusModal agora exibirá "Configurar Políticas" devido ao estado incompleto
+        // CORREÇÃO: Abre o modal de políticas IMEDIATAMENTE após submissão do formulário
+        setShowEcommercePolicies(true);
     };
     
     const handleBundleMigrationSubmit = (formData: any) => { setShowBundleMigrationModal(false); setShowStatusModal(true); };
@@ -459,6 +460,8 @@ const Layout: React.FC = () => {
     // Handler para salvar políticas e liberar o botão "Ver Loja"
     const handlePoliciesSaved = async () => {
         await refreshGoals(); // Atualiza goals.ecommercePolicies.configured para true
+        // Opcional: Mostrar status modal agora para mostrar que está tudo pronto
+        setShowStatusModal(true);
     };
 
     const handleReviewLowMargins = () => {
@@ -571,7 +574,7 @@ const Layout: React.FC = () => {
                 onOpenGoogleForm={() => { setShowStatusModal(false); setShowGoogleForm(true); }}
                 onOpenEcommerceDetails={() => { setShowStatusModal(false); setShowEcommerceDetail(true); }}
                 onOpenEcommerceForm={() => { setShowStatusModal(false); setShowEcommerceForm(true); }}
-                onOpenEcommercePolicies={() => { setShowStatusModal(false); setShowEcommercePolicies(true); }}
+                // onOpenEcommercePolicies foi removido pois agora é automático
                 onRefreshData={refreshGoals}
             />}
             
