@@ -343,8 +343,6 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
     
     // Ecommerce Logic
     const ecommerceRequest = statusData.requests.find(r => r.type === 'ecommerce' && (r.status === 'completed' || r.status === 'approved'));
-    // CHECK if policies are configured to unlock the button
-    const isEcommerceConfigured = storeGoals?.ecommercePolicies?.configured === true;
 
     return (
         <div className="fixed inset-0 bg-black bg-opacity-70 backdrop-blur-sm flex items-center justify-center z-120 p-4">
@@ -437,7 +435,7 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                                                     <h3 className="font-bold text-lg text-green-600 dark:text-green-400">Presença no Google Confirmada</h3>
                                                     <p className="text-sm text-gray-600 dark:text-gray-300 mt-1">A {storeGoals?.companyInfo.name} está visível no Google.</p>
                                                 </div>
-                                                <a href={storeGoals?.googleBusiness?.mapsUri || '#'} target="_blank" className="px-4 py-2 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 text-xs">Ver Perfil no Google</a>
+                                                <a href={storeGoals?.googleBusiness?.mapsUri || ''} target="_blank" className="px-4 py-2 bg-white border border-gray-300 text-gray-700 font-bold rounded-lg hover:bg-gray-50 text-xs">Ver Perfil no Google</a>
                                             </div>
                                         ) : isMapsExecutionPending ? (
                                             <div>
@@ -490,22 +488,12 @@ const SystemStatusModal: React.FC<SystemStatusModalProps> = (props) => {
                                                     </p>
                                                 </div>
                                                 
-                                                {/* CONDITIONAL RENDER: Configurar vs Ver Loja */}
-                                                {!isEcommerceConfigured ? (
-                                                    <button 
-                                                        onClick={onOpenEcommercePolicies} 
-                                                        className="px-6 py-2 bg-orange-500 hover:bg-orange-600 text-white font-bold rounded-lg shadow-sm text-xs animate-pulse"
-                                                    >
-                                                        ⚠️ Configurar Políticas da Loja
-                                                    </button>
-                                                ) : (
-                                                    <button 
-                                                        onClick={handleOpenStore} 
-                                                        className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-sm text-xs"
-                                                    >
-                                                        Ver Loja Online
-                                                    </button>
-                                                )}
+                                                <button 
+                                                    onClick={handleOpenStore} 
+                                                    className="px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg shadow-sm text-xs"
+                                                >
+                                                    Ver Loja Online
+                                                </button>
                                             </div>
                                         ) : (
                                             // Se não tiver request, mostra o botão para ativar, seja Trial ou Pago
