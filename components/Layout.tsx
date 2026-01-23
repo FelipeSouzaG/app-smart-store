@@ -28,6 +28,7 @@ import EcommerceFormModal from './EcommerceFormModal';
 import BundleMigrationModal from './BundleMigrationModal';
 import GoogleVerificationAlertModal, { GrowthVariant } from './GoogleVerificationAlertModal';
 import BroadcastModal from './BroadcastModal';
+import EcommercePoliciesModal from './EcommercePoliciesModal';
 
 import { 
     CashTransaction, Service, Product, PurchaseOrder, ServiceOrder, TicketSale, User, Customer, Supplier, KpiGoals, TurnoverPeriod, FinancialAccount, TransactionStatus
@@ -43,6 +44,8 @@ const PaymentSuccessModal: React.FC<{ type: string, onClose: () => void, tenantN
         </div>
     </div>
 );
+
+// ... (Outros componentes auxiliares como NotificationModal e alertas mantidos) ...
 
 const NotificationModal: React.FC<{ isOpen: boolean; type: 'success' | 'error' | 'info'; message: string; onClose: () => void }> = ({ isOpen, type, message, onClose }) => {
     if (!isOpen) return null;
@@ -163,6 +166,7 @@ const Layout: React.FC = () => {
     const [showFeedbackModal, setShowFeedbackModal] = useState(false);
     const [showEcommerceDetail, setShowEcommerceDetail] = useState(false); 
     const [showEcommerceForm, setShowEcommerceForm] = useState(false);
+    const [showEcommercePolicies, setShowEcommercePolicies] = useState(false);
     
     // NEW MODALS
     const [showBundleMigrationModal, setShowBundleMigrationModal] = useState(false);
@@ -271,11 +275,6 @@ const Layout: React.FC = () => {
 
                 // PRIORITY 4: WELCOME / SETUP WIZARD (LOGIC FIX)
                 if (determinedAction === 'none') {
-                    // Need to check goals state here, but it's set async above. 
-                    // However, for bootstrap logic, we can rely on what we fetch or defer to next render.
-                    // For safety, we fetch once more if goals is empty or wait.
-                    // Actually, the apiCall above waits. So we can use the result if we captured it.
-                    // Let's re-fetch to be safe inside this closure variable since setState is async
                     const settings = await apiCall('settings', 'GET');
 
                     if (settings) {
@@ -407,14 +406,7 @@ const Layout: React.FC = () => {
         if (updated) { 
             setGoals(updated); 
             setIsFirstRunST(false);
-            setShowSetupWizard(false); // Force close wizard
-            
-            // Re-check for low margins after update
-            if (activePage === 'products') {
-                // If we are on products page, logic inside Products component handles visualization
-                // But global alert logic can be here
-                // ...
-            }
+            setShowSetupWizard(false); 
         }
     };
     
@@ -432,7 +424,6 @@ const Layout: React.FC = () => {
     };
 
     const handleVerificationComplete = () => {
-        // Refresh settings to check status
         refreshGoals();
     };
 
@@ -454,19 +445,27 @@ const Layout: React.FC = () => {
 
     const handleEcommerceFormSubmit = (formData: any) => { 
         setShowEcommerceForm(false); 
+        // Passa para o modal de pagamento/request do sistema
         setPendingServicePayload({ type: 'ecommerce', payload: formData });
+        // Assim que o request for processado (mesmo trial é instantâneo), abrimos o modal de políticas
         setShowStatusModal(true);
+        // O SystemStatusModal agora exibirá "Configurar Políticas" devido ao estado incompleto
     };
     
     const handleBundleMigrationSubmit = (formData: any) => { setShowBundleMigrationModal(false); setShowStatusModal(true); };
 
     const handleConfirmBasicUpgrade = () => { setShowEcomLossWarning(false); setShowStatusModal(true); };
     const handleUpgradeBundleClick = () => { setShowEcomLossWarning(false); setShowBundleMigrationModal(true); };
-    const handleUpgradeBasicClick = () => { setShowEcomLossWarning(true); }; // Check first
+    const handleUpgradeBasicClick = () => { setShowEcomLossWarning(true); }; 
+    
+    // Handler para salvar políticas e liberar o botão "Ver Loja"
+    const handlePoliciesSaved = async () => {
+        await refreshGoals(); // Atualiza goals.ecommercePolicies.configured para true
+    };
 
     const handleReviewLowMargins = () => {
         setShowLowMarginAlert(false);
-        setPassLowMarginFilter(true); // Pass this to Products component
+        setPassLowMarginFilter(true); 
         setActivePage('products');
     };
     
@@ -574,9 +573,17 @@ const Layout: React.FC = () => {
                 onOpenGoogleForm={() => { setShowStatusModal(false); setShowGoogleForm(true); }}
                 onOpenEcommerceDetails={() => { setShowStatusModal(false); setShowEcommerceDetail(true); }}
                 onOpenEcommerceForm={() => { setShowStatusModal(false); setShowEcommerceForm(true); }}
+                onOpenEcommercePolicies={() => { setShowStatusModal(false); setShowEcommercePolicies(true); }}
                 onRefreshData={refreshGoals}
             />}
             
+            <EcommercePoliciesModal 
+                isOpen={showEcommercePolicies}
+                onClose={() => setShowEcommercePolicies(false)}
+                onSave={handlePoliciesSaved}
+                goals={goals}
+            />
+
             <NotificationModal isOpen={notification.isOpen} type={notification.type as any} message={notification.message} onClose={() => setNotification({ ...notification, isOpen: false })} />
 
             <ExpirationAlertModal 
