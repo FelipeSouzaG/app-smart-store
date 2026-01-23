@@ -286,6 +286,7 @@ const Layout: React.FC = () => {
                         }
                     
                         // PRIORITY 5: GOOGLE SUCCESS (Verified but didn't see modal yet)
+                        // This logic relies on successShown being reset to false when an update occurs via Admin
                         if (determinedAction === 'none' && settings.googleBusiness?.status === 'verified' && !settings.googleBusiness?.successShown) {
                             determinedAction = 'google_success';
                             setGoogleSuccessLink(settings.googleBusiness?.mapsUri || '');
@@ -343,10 +344,8 @@ const Layout: React.FC = () => {
                                 determinedAction = 'growth';
                                 growthVariant = 'ecommerce_offer';
                             }
-                        } else if (billingData.plan === 'trial' && isMapsCompleted && (hasEcommerceService || hasExternalEcom)) {
-                            determinedAction = 'growth';
-                            growthVariant = 'single_tenant_offer';
-                        }
+                        } 
+                        // Removed single_tenant_offer check as requested
                     }
                 }
                 
@@ -420,7 +419,6 @@ const Layout: React.FC = () => {
         setGrowthAlertVariant(null);
         if (growthAlertVariant === 'verify' || growthAlertVariant === 'maps_offer') setShowGoogleVerification(true);
         if (growthAlertVariant === 'ecommerce_offer') setShowEcommerceDetail(true);
-        if (growthAlertVariant === 'single_tenant_offer') setShowStatusModal(true);
     };
 
     const handleVerificationComplete = () => {
